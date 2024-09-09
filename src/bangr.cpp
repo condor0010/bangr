@@ -8,8 +8,10 @@
 using namespace BinaryNinja;
 
 int main (int argc, char* argv[]) {
-	// exit if binary is not specified
 	if (argc != 2){return 1;}
+
+	auto binary = argv[1];
+	auto addr   = argv[2]
 
 	// plugin setup bs
 	SetBundledPluginDirectory(GetBundledPluginDirectory()); 
