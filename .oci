@@ -1,0 +1,13 @@
+from debian:12
+
+run apt -y update
+run apt -y upgrade
+
+run apt -y install build-essential cmake pkg-config libfmt-dev
+
+env BN_API_PATH=$(pwd)/binaryninjaapi/
+env BN_INSTALL_DIR=/opt/binaryninja/
+
+run mkdir /root/bangr
+workdir /root/bangr/
+entrypoint ./build.sh
