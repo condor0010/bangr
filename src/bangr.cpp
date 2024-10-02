@@ -1,31 +1,38 @@
-#include<stdio.h>
+#include <stdio.h>
 #include <cinttypes>
 #include <typeinfo>
+#include <iostream>
+#include <vector>
 
 #include "binaryninjacore.h"
 #include "binaryninjaapi.h"
 #include "mediumlevelilinstruction.h"
 
 using namespace BinaryNinja;
-#include <iostream>
 using namespace std;
 
-int main (int argc, char* argv[]) {
-	if(argc != 3){ printf("%s <binary> <address>\n", argv[0]); return 1;}
+int main(int argc, char* argv[]) {
+    if (argc != 3) {printf("%s <binary> <address>\n", argv[0]);}
 
-	char* binary_arg = argv[1];
-	int  addr_arg   = atoi(argv[2]);
+    char* binary_arg = argv[1];
+    //int addr_arg = 0x00401136;
+    int addr_arg = atoi(argv[2]);
 
-	SetBundledPluginDirectory(GetBundledPluginDirectory());
-	InitPlugins();
+    SetBundledPluginDirectory(GetBundledPluginDirectory());
+    InitPlugins();
 
-	Ref<BinaryView> bv = BinaryNinja::Load(binary_arg);
-	for (auto& func : bv->GetAnalysisFunctionList()){
-		Ref<MediumLevelILFunction> il = func->GetMediumLevelIL();
-	}
-	
-	
-	//std::vector<Ref<Function>> func = bv->GetAnalysisFunctionsForAddress(addr_arg);
-	//Ref<MediumLevelILFunction> il = func->GetMediumLevelIL();
-	
+    Ref<BinaryView> bv = BinaryNinja::Load(binary_arg);
+    
+    std::vector<Ref<Function>> funcs = bv->GetAnalysisFunctionsForAddress(addr_arg);
+    
+    Ref<Function> function = funcs[0];
+    
+    Ref<MediumLevelILFunction> il = function->GetMediumLevelIL();
+    
+    for (auto& block : il->GetBasicBlocks()){
+	    printf("%p", block);
+    }
+    
+    return 0;
 }
+
