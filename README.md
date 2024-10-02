@@ -25,4 +25,10 @@ pushd build
 make
 ```
 
+### or this (if issues with ^)
+
+```
+podman build . -t senproj -f .oci
+podman run --rm -v "$(pwd):/root/bangr" -v /opt/binaryninja/:/opt/binaryninja -ti senproj
+```
 
