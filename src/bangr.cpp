@@ -1,5 +1,6 @@
 #include <vector>
 #include <stdio.h>
+#include <string>
 #include <cinttypes>
 
 #include "binaryninjaapi.h"
@@ -34,7 +35,14 @@ int main(int argc, char* argv[]) {
     }
 
     Ref<Function> function = funcs[0];
-    Ref<MediumLevelILFunction> il = function->GetMediumLevelIL();
+    Ref<MediumLevelILFunction> il = function->GetMediumLevelIL()->GetSSAForm();
+    std::set<SSAVariable> vars = function->GetMediumLevelILSSAVariables();
+
+    printf("Finding SSA Variables...\n");
+    for (SSAVariable var : vars) {
+        printf("%s#%u\n", function->GetVariableName(var.var).c_str(), var.version);
+    }
+    puts("");
     
     printf("Analyzing function...\n");
     for (auto& block : il->GetBasicBlocks()) {
@@ -52,11 +60,11 @@ int main(int argc, char* argv[]) {
             }
             printf("\n");
 
-            printf("    SSA: ");
-            for (const auto& token : tokens) {
-                printf("%s ", token.text.c_str());
-            }
-            printf("\n");
+            // printf("    SSA: ");
+            // for (const auto& token : tokens) {
+            //     printf("%s ", token.text.c_str());
+            // }
+            // printf("\n");
         }
     }
     return 0;
