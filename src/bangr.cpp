@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
     }
 
     char* binary_arg = argv[1];
-    int addr_arg = atoi(argv[2]);
+    int addr_arg = std::stoi(argv[2], nullptr, 16);
 
     SetBundledPluginDirectory(GetBundledPluginDirectory());
     InitPlugins();
