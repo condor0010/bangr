@@ -517,7 +517,7 @@ int main(int argc, char* argv[]) {
             std::cout << "\t" << op << "\n";
         }
     }
-
+    std::system("pkill bangr");
     return 0;
 }
 
