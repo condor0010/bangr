@@ -1,7 +1,10 @@
 #include <vector>
-#include <stdio.h>
 #include <string>
 #include <cinttypes>
+#include <map>
+#include <set>
+#include <sstream>
+#include <iostream>
 
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
@@ -10,9 +13,13 @@
 using namespace std;
 using namespace BinaryNinja;
 
+struct VariableOperations {
+    std::vector<std::string> operations;
+};
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
-        printf("%s <binary> <address>\n", argv[0]);
+        std::cout << "Usage: " << argv[0] << " <binary> <address>\n";
         return 1;
     }
 
@@ -24,13 +31,13 @@ int main(int argc, char* argv[]) {
 
     Ref<BinaryView> bv = BinaryNinja::Load(binary_arg);
     if (!bv) {
-        printf("Failed to load binary: %s\n", binary_arg);
+        std::cout << "Failed to load binary: " << binary_arg << "\n";
         return 1;
     }
 
     std::vector<Ref<Function>> funcs = bv->GetAnalysisFunctionsForAddress(addr_arg);
     if (funcs.empty()) {
-        printf("No functions found at address: 0x%x\n", addr_arg);
+        std::cout << "No functions found at address: 0x" << std::hex << addr_arg << "\n";
         return 1;
     }
 
@@ -38,35 +45,89 @@ int main(int argc, char* argv[]) {
     Ref<MediumLevelILFunction> il = function->GetMediumLevelIL()->GetSSAForm();
     std::set<SSAVariable> vars = function->GetMediumLevelILSSAVariables();
 
-    printf("Finding SSA Variables...\n");
+    std::map<SSAVariable, VariableOperations> variableOps;
+
+    std::cout << "Finding SSA Variables...\n";
     for (SSAVariable var : vars) {
-        printf("%s#%u\n", function->GetVariableName(var.var).c_str(), var.version);
+        std::cout << function->GetVariableName(var.var) << "#" << var.version << "\n";
     }
-    puts("");
-    
-    printf("Analyzing function...\n");
+    std::cout << "\n";
+
+    std::cout << "Analyzing function...\n";
     for (auto& block : il->GetBasicBlocks()) {
-        printf("Basic block: %p\n", (void*)block->GetStart());
-        
+        std::ostringstream blockInfo;
+        blockInfo << "Basic block @ 0x" << std::hex << block->GetStart() << ":\n";
+        std::cout << blockInfo.str();
+
         for (size_t instrIndex = block->GetStart(); instrIndex < block->GetEnd(); instrIndex++) {
             MediumLevelILInstruction instr = (*il)[instrIndex];
             vector<InstructionTextToken> tokens;
 
             il->GetInstructionText(function, function->GetArchitecture(), instrIndex, tokens);
-            printf("    Instruction @ 0x%" PRIx64 ": ", instr.address);
-
+            std::ostringstream instrInfo;
+            instrInfo << "\t0x" << std::hex << instr.address << ": ";
             for (const auto& token : tokens) {
-                printf("%s ", token.text.c_str());
+                instrInfo << token.text << " ";
             }
-            printf("\n");
+            instrInfo << "\n";
+            std::cout << instrInfo.str();
 
-            // printf("    SSA: ");
-            // for (const auto& token : tokens) {
-            //     printf("%s ", token.text.c_str());
-            // }
-            // printf("\n");
+            // Track operations on SSA variables
+            for (const auto& token : tokens) {
+                for (auto& var : vars) {
+                    std::string varName = function->GetVariableName(var.var) + "#" + std::to_string(var.version);
+                    if (token.text == varName) {
+                        // Describe the operation performed on the SSA variable
+                        std::ostringstream operationDescription;
+
+                        // Determine the operation based on the opcode
+                        switch (instr.operation) {
+                            case MLIL_ADD:
+                                operationDescription << "Addition ";
+                                break;
+                            case MLIL_SUB:
+                                operationDescription << "Subtraction ";
+                                break;
+                            case MLIL_MUL:
+                                operationDescription << "Multiplication ";
+                                break;
+                            case MLIL_FDIV:
+                                operationDescription << "Division ";
+                                break;
+                            case MLIL_LOAD:
+                                operationDescription << "Load ";
+                                break;
+                            case MLIL_STORE:
+                                operationDescription << "Store ";
+                                break;
+                            // TODO: incomplete swtch statment, also is always the default unsure why atm"        
+                            default:                                                    
+                                operationDescription << "Other Operation ";             
+                                break;
+                        }
+
+                        operationDescription << "on " << token.text << " at addr: 0x" << std::hex << instr.address;
+                        variableOps[var].operations.push_back(operationDescription.str());
+                    }
+                }
+            }
         }
     }
+
+    std::cout << "\nSSA Variable Operations:\n";
+
+    for (const auto& pair : variableOps) {
+        const SSAVariable& var = pair.first;
+        const VariableOperations& ops = pair.second;
+
+        std::ostringstream varInfo;
+        varInfo << "Variable " << function->GetVariableName(var.var) << "#" << var.version << ":\n";
+        std::cout << varInfo.str();
+        for (const auto& op : ops.operations) {
+            std::cout << "\t" << op << "\n";
+        }
+    }
+
     return 0;
 }
 
