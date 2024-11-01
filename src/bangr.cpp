@@ -52,21 +52,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Analyzing function...\n";
 
-    blockAnalyze(il);
+    blockAnalyze(&function);
 
-    std::cout << "\nSSA Variable Operations:\n";
-
-    for (const auto& pair : variableOps) {
-        const SSAVariable& var = pair.first;
-        const VariableOperations& ops = pair.second;
-
-        std::ostringstream varInfo;
-        varInfo << "Variable " << function->GetVariableName(var.var) << "#" << var.version << ":\n";
-        std::cout << varInfo.str();
-        for (const auto& op : ops.operations) {
-            std::cout << "\t" << op << "\n";
-        }
-    }
+    system("pkill bangr");
 
     return 0;
 }
