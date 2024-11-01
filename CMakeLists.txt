@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
 project(bangr CXX C)
 
 add_executable(${PROJECT_NAME}
-    src/bangr.cpp)
+    src/bangr.cpp
+    src/blockAnalyze.cpp)
 
 if(NOT BN_API_BUILD_EXAMPLES AND NOT BN_INTERNAL_BUILD)
     # Out-of-tree build
