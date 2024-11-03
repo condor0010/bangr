@@ -52,9 +52,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Analyzing function...\n";
 
-    blockAnalyze(&function);
+    functionAnalyze(&function);
 
-    system("pkill bangr");
+    std::system("pkill bangr");
 
     return 0;
 }
