@@ -445,7 +445,6 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
                         case MLIL_MEM_PHI:
                            operationDescription << "MLIL_MEM_PHI ";
                            break;
-                        // TODO: incomplete swtch statment, also is always the default unsure why atm"        
                         default:                                                    
                            operationDescription << "Other Operation ";             
                            break;
