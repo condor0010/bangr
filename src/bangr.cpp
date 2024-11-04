@@ -6,7 +6,7 @@
 #include <sstream>
 #include <iostream>
 
-#include "blockAnalyze.h"
+#include "functionAnalyze.h"
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
 #include "mediumlevelilinstruction.h"
@@ -43,14 +43,6 @@ int main(int argc, char* argv[]) {
     std::set<SSAVariable> vars = function->GetMediumLevelILSSAVariables();
 
     std::map<SSAVariable, VariableOperations> variableOps;
-
-    std::cout << "Finding SSA Variables...\n";
-    for (SSAVariable var : vars) {
-        std::cout << function->GetVariableName(var.var) << "#" << var.version << "\n";
-    }
-    std::cout << "\n";
-
-    std::cout << "Analyzing function...\n";
 
     functionAnalyze(&function);
 

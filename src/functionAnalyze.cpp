@@ -4,6 +4,10 @@
 #include <vector>
 #include <map>
 #include <queue>
+#include <thread>
+#include <mutex>
+#include <future>
+#include <atomic>
 
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
@@ -12,8 +16,10 @@ using namespace std;
 using namespace BinaryNinja;
 
 struct VariableOperations {
-    std::vector<std::string> operations;
+    std::vector<std::pair<std::string, uint64_t>> operations; // Pair of operation description and block address
 };
+
+std::mutex outputMutex;
 
 std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBlock, std::map<SSAVariable, VariableOperations>* variableOps) {
     Ref<BasicBlock> block = *basicBlock;
@@ -22,6 +28,7 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
     Ref<MediumLevelILFunction> il = func->GetMediumLevelIL()->GetSSAForm();
     
     std::set<SSAVariable> vars = func->GetMediumLevelILSSAVariables();
+    uint64_t blockAddress = block->GetStart(); // Get the block address
 
     for (size_t instrIndex = block->GetStart(); instrIndex < block->GetEnd(); instrIndex++) {
         MediumLevelILInstruction instr = (*il)[instrIndex];
@@ -29,15 +36,12 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
         il->GetInstructionText(func, func->GetArchitecture(), instrIndex, tokens);
 
         for (const auto& token : tokens) {
-            // TODO: refactor this to just search the vars set for token.test
             for (const auto& var : vars) {
                 std::string varName = func->GetVariableName(var.var) + "#" + std::to_string(var.version);
                 if (token.text == varName) {
-                    // Determine the operation based on the opcode
                     std::ostringstream operationDescription;
                     operationDescription << "Operation on " << token.text << " at addr: 0x" << std::hex << instr.address;
 
-                    // Here we check for more operations
                     switch (instr.operation) {
                         case MLIL_NOP:
                            operationDescription << "MLIL_NOP ";
@@ -451,25 +455,37 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
                            operationDescription << "Other Operation ";             
                            break;
                     }
-                    varOps[var].operations.push_back(operationDescription.str());
+
+                    varOps[var].operations.emplace_back(operationDescription.str(), blockAddress); // Store operation with block address
                 }
             }
         }
     }
+    
     return variableOps; // Return the modified map
 }
 
-std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock> *basicBlock, std::map<SSAVariable, VariableOperations> *variableOps) {
+void analyzeBlock(Ref<BasicBlock> block, std::map<SSAVariable, VariableOperations>& varOps) {
+    blockAnalyze(&block, &varOps);
+}
+
+std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock>* basicBlock, std::map<SSAVariable, VariableOperations>* variableOps) {
     std::set<Ref<BasicBlock>> seenBlocks;
     std::map<SSAVariable, VariableOperations>& varOps = *variableOps; // Reference for modifications
     Ref<BasicBlock> startingBlock = (Ref<BasicBlock>)*basicBlock;
     std::queue<Ref<BasicBlock>> nextBlocks;
     seenBlocks.insert(startingBlock);
     nextBlocks.push(startingBlock);
+
+    std::vector<std::future<void>> futures;
+
     while (!nextBlocks.empty()) {
         Ref<BasicBlock> nextBlock = nextBlocks.front();
         nextBlocks.pop();
-        blockAnalyze(&nextBlock, &varOps);
+
+        // Launch each block analysis in its own thread
+        futures.push_back(std::async(std::launch::async, analyzeBlock, nextBlock, std::ref(varOps)));
+
         for (auto& edge: nextBlock->GetOutgoingEdges()) {
             Ref<BasicBlock> childBlock = edge.target;
             if (!seenBlocks.contains(childBlock)) {
@@ -478,33 +494,44 @@ std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock> *basicBlock
             }
         }
     }
+
+    // Wait for all threads to finish
+    for (auto& future : futures) {
+        future.get();
+    }
+
     return variableOps;
 }
 
-std::map<SSAVariable, VariableOperations> * functionAnalyze(Ref<Function> *function) {
+std::map<SSAVariable, VariableOperations>* functionAnalyze(Ref<Function>* function) {
     Ref<Function> func = (Ref<Function>)*function;
     Ref<MediumLevelILFunction> il = func->GetMediumLevelIL()->GetSSAForm();
     std::map<SSAVariable, VariableOperations> variableOps;
 
     Ref<BasicBlock> firstBlock = il->GetBasicBlocks().front();
     walkGraph(&firstBlock, &variableOps);
-    /*
-    for (auto& block : il->GetBasicBlocks()) {
-        blockAnalyze(&block, &variableOps);
-    }*/
 
     std::cout << "\nSSA Variable Operations:\n";
     for (const auto& pair : variableOps) {
         const SSAVariable& var = pair.first;
         const VariableOperations& ops = pair.second;
 
-        std::ostringstream varInfo;
-        varInfo << "Variable " << func->GetVariableName(var.var) << "#" << var.version << ":\n";
-        std::cout << varInfo.str();
-        for (const auto& op : ops.operations) {
-            std::cout << "\t" << op << "\n";
+        // Print the address of the block associated with each operation
+        if (!ops.operations.empty()) {
+            uint64_t blockAddress = ops.operations.front().second; // Get the block address from the first operation
+            std::ostringstream varInfo;
+            varInfo << "Variable " << func->GetVariableName(var.var) << "#" << var.version << ":\n";
+
+            std::cout << "Block Address: 0x" << std::hex << blockAddress << "\n"; // Print the block address
+            std::cout << "\t" << varInfo.str();
+
+            for (const auto& op : ops.operations) {
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cout << "\t\t" << op.first << "\n"; // Two tabs in front of operations
+            }
         }
     }
+
     return 0;
 }
 
