@@ -32,3 +32,8 @@ podman build . -t senproj -f .oci
 podman run --rm -v "$(pwd):/root/bangr" -v /opt/binaryninja/:/opt/binaryninja -ti senproj
 ```
 
+### useage
+
+```
+build/out/bin/bangr test_bins/num 0x00401146
+```
