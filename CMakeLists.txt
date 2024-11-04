@@ -4,7 +4,7 @@ project(bangr CXX C)
 
 add_executable(${PROJECT_NAME}
     src/bangr.cpp
-    src/blockAnalyze.cpp)
+    src/functionAnalyze.cpp)
 
 if(NOT BN_API_BUILD_EXAMPLES AND NOT BN_INTERNAL_BUILD)
     # Out-of-tree build
