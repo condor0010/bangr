@@ -3,6 +3,7 @@
 #include <cinttypes>
 #include <vector>
 #include <map>
+#include <queue>
 
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
@@ -28,6 +29,7 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
         il->GetInstructionText(func, func->GetArchitecture(), instrIndex, tokens);
 
         for (const auto& token : tokens) {
+            // TODO: refactor this to just search the vars set for token.test
             for (const auto& var : vars) {
                 std::string varName = func->GetVariableName(var.var) + "#" + std::to_string(var.version);
                 if (token.text == varName) {
@@ -457,14 +459,39 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
     return variableOps; // Return the modified map
 }
 
+std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock> *basicBlock, std::map<SSAVariable, VariableOperations> *variableOps) {
+    std::set<Ref<BasicBlock>> seenBlocks;
+    std::map<SSAVariable, VariableOperations>& varOps = *variableOps; // Reference for modifications
+    Ref<BasicBlock> startingBlock = (Ref<BasicBlock>)*basicBlock;
+    std::queue<Ref<BasicBlock>> nextBlocks;
+    seenBlocks.insert(startingBlock);
+    nextBlocks.push(startingBlock);
+    while (!nextBlocks.empty()) {
+        Ref<BasicBlock> nextBlock = nextBlocks.front();
+        nextBlocks.pop();
+        blockAnalyze(&nextBlock, &varOps);
+        for (auto& edge: nextBlock->GetOutgoingEdges()) {
+            Ref<BasicBlock> childBlock = edge.target;
+            if (!seenBlocks.contains(childBlock)) {
+                nextBlocks.push(childBlock);
+                seenBlocks.insert(childBlock);
+            }
+        }
+    }
+    return variableOps;
+}
+
 std::map<SSAVariable, VariableOperations> * functionAnalyze(Ref<Function> *function) {
     Ref<Function> func = (Ref<Function>)*function;
     Ref<MediumLevelILFunction> il = func->GetMediumLevelIL()->GetSSAForm();
     std::map<SSAVariable, VariableOperations> variableOps;
 
+    Ref<BasicBlock> firstBlock = il->GetBasicBlocks().front();
+    walkGraph(&firstBlock, &variableOps);
+    /*
     for (auto& block : il->GetBasicBlocks()) {
         blockAnalyze(&block, &variableOps);
-    }
+    }*/
 
     std::cout << "\nSSA Variable Operations:\n";
     for (const auto& pair : variableOps) {
