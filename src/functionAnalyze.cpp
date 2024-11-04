@@ -40,7 +40,7 @@ std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBl
                 std::string varName = func->GetVariableName(var.var) + "#" + std::to_string(var.version);
                 if (token.text == varName) {
                     std::ostringstream operationDescription;
-                    operationDescription << "Operation on " << token.text << " at addr: 0x" << std::hex << instr.address;
+                    operationDescription << "0x" << std::hex << instr.address << ":\t";
 
                     switch (instr.operation) {
                         case MLIL_NOP:
@@ -502,7 +502,7 @@ std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock>* basicBlock
 
     return variableOps;
 }
-
+/*
 std::map<SSAVariable, VariableOperations>* functionAnalyze(Ref<Function>* function) {
     Ref<Function> func = (Ref<Function>)*function;
     Ref<MediumLevelILFunction> il = func->GetMediumLevelIL()->GetSSAForm();
@@ -522,12 +522,52 @@ std::map<SSAVariable, VariableOperations>* functionAnalyze(Ref<Function>* functi
             std::ostringstream varInfo;
             varInfo << "Variable " << func->GetVariableName(var.var) << "#" << var.version << ":\n";
 
-            std::cout << "Block Address: 0x" << std::hex << blockAddress << "\n"; // Print the block address
+            std::cout << "Block Address: " << blockAddress << "\n"; // Print the block address
             std::cout << "\t" << varInfo.str();
 
             for (const auto& op : ops.operations) {
                 std::lock_guard<std::mutex> lock(outputMutex);
                 std::cout << "\t\t" << op.first << "\n"; // Two tabs in front of operations
+            }
+        }
+    }
+
+    return 0;
+}
+*/
+std::map<SSAVariable, VariableOperations>* functionAnalyze(Ref<Function>* function) {
+    Ref<Function> func = (Ref<Function>)*function;
+    Ref<MediumLevelILFunction> il = func->GetMediumLevelIL()->GetSSAForm();
+    std::map<SSAVariable, VariableOperations> variableOps;
+
+    Ref<BasicBlock> firstBlock = il->GetBasicBlocks().front();
+    walkGraph(&firstBlock, &variableOps);
+
+    std::cout << "\nSSA Variable Operations:\n";
+
+    std::set<uint64_t> printedBlocks; // To keep track of printed block addresses
+
+    for (const auto& pair : variableOps) {
+        const SSAVariable& var = pair.first;
+        const VariableOperations& ops = pair.second;
+
+        if (!ops.operations.empty()) {
+            uint64_t blockAddress = ops.operations.front().second; // Get the block address from the first operation
+
+            // Print the block address only if it hasn't been printed yet
+            if (printedBlocks.find(blockAddress) == printedBlocks.end()) {
+                printedBlocks.insert(blockAddress); // Mark this block as printed
+                std::cout << "Block Address: " << blockAddress << "\n"; // Print the block address
+            }
+
+            std::ostringstream varInfo;
+            varInfo << "Variable " << func->GetVariableName(var.var) << "#" << var.version << ":\n";
+
+            std::cout << "\t" << varInfo.str(); // Indent variable information
+
+            for (const auto& op : ops.operations) {
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cout << "\t\t" << op.first << "\n"; // Indent operations
             }
         }
     }
