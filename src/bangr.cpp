@@ -51,3 +51,16 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+extern "C" {
+    BN_DECLARE_CORE_ABI_VERSION
+
+    BINARYNINJAPLUGIN bool CorePluginInit()
+    {
+        PluginCommand::Register("Bangr\\Run", "Run Bangr", [](BinaryView* view) {
+            // placeholder for the moment
+            main(0, nullptr);
+		});
+        return true;
+    }
+}
+
