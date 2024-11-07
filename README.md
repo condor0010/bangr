@@ -37,3 +37,25 @@ podman run --rm -v "$(pwd):/root/bangr" -v /opt/binaryninja/:/opt/binaryninja -t
 ```
 build/out/bin/bangr test_bins/num 0x00401146
 ```
+
+# TODO list
+
+## states
+
+🔴 - not done
+
+🔵 - started
+
+🟡 - done & untested
+
+🟢 - done & tested
+
+| task                                                                                                                 | person | state |
+|----------------------------------------------------------------------------------------------------------------------|--------|-------|
+| Setting up multi-threading                                                                                           |        |       |
+| Reorganizing SSA operations into sets based off their taint level                                                    |        |       |
+| Insert comments into the UI                                                                                          |        |       |
+| Make it show up as a plugin in the UI                                                                                |        |       |
+| Tree that is analogous to CFG tree in step 3, each node will store the change of taint that block will cause         |        |       |
+| Condense basic blocks with only one parent so that all such blocks in a sequence can be started on a singular thread |        |       |
+
