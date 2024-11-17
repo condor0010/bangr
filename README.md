@@ -50,12 +50,11 @@ build/out/bin/bangr test_bins/num 0x00401146
 
 🟢 - done & tested
 
-| task                                                                                                                 | person | state |
-|----------------------------------------------------------------------------------------------------------------------|--------|-------|
-| Setting up multi-threading                                                                                           |        |       |
-| Reorganizing SSA operations into sets based off their taint level                                                    |        |       |
-| Insert comments into the UI                                                                                          |        |       |
-| Make it show up as a plugin in the UI                                                                                |        |       |
-| Tree that is analogous to CFG tree in step 3, each node will store the change of taint that block will cause         |        |       |
-| Condense basic blocks with only one parent so that all such blocks in a sequence can be started on a singular thread |        |       |
-
+| task                                                                                                                 | person | state                     | Due date   | commit hash |
+|----------------------------------------------------------------------------------------------------------------------|--------|---------------------------|------------|-------------|
+| Setting up multi-threading / codeblock grouping                                                                      |Louie         | :large_blue_circle: | 2024/12/13 |             |
+| Reorganizing SSA operations into sets based off their taint level                                                    |Marcus        | :red_circle:        | 2024/12/13 |             |
+| Insert comments into the UI                                                                                          |Marcus        | :red_circle:        | 2024/12/13 |             |
+| Make it show up as a plugin in the UI                                                                                |Dylan         | :large_blue_circle: | 2024/11/29 |             |
+| coalescing codeblocks/functions to track the inheritence of taint                                                    |Louie/Marcus  | :red_circle:        | TBD        |             |
+| DataStructure paired to each group of codeblocks to facliatete the tracking of taint                                 |Marcus        | :red_circle:        | TBD        |             |
