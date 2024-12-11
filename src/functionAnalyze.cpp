@@ -488,7 +488,6 @@ std::map<SSAVariable, VariableOperations>* walkGraph(Ref<BasicBlock>* basicBlock
 
         for (auto& edge: nextBlock->GetOutgoingEdges()) {
             Ref<BasicBlock> childBlock = edge.target;
-            //if (seenBlocks.find(childBlock) != seenBlocks.end()) {
             if (seenBlocks.contains(childBlock)) {
                 nextBlocks.push(childBlock);
                 seenBlocks.insert(childBlock);
