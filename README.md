@@ -52,9 +52,10 @@ build/out/bin/bangr test_bins/num 0x00401146
 
 | Task                                                                                                                 | Person | State                     | Due Date   | Commit Hash |
 |----------------------------------------------------------------------------------------------------------------------|--------|---------------------------|------------|-------------|
-| Setting up multi-threading / codeblock grouping.                                                                     |Louie         | :large_blue_circle: | 2025/01/31 |             |
-| Reorganizing SSA operations into sets based off their taint level.                                                   |Marcus        | :large_blue_circle: | 2025/01/31 |             |
-| Insert comments into the BinaryNinja UI.                                                                             |Marcus        | :large_blue_circle: | 2025/01/31 |             |
-| Make it show up as a plugin in the BinaryNinja UI.                                                                   |Dylan         | :large_blue_circle: | 2025/01/31 |             |
-| Coalescing codeblocks/functions to track the inheritance of taint.                                                   |Louie/Marcus  | :red_circle:        | TBD        |             |
-| Develop a Data Structure paired to each group of codeblocks to facilitate the tracking of taint.                     |Marcus        | :red_circle:        | TBD        |             |
+| Setting up multi-threading by functions.                                                                             |Louie         | :large_blue_circle: | 2025/03/07 |             |
+| Reorganizing SSA operations into sets based off their taint level.                                                   |Dylan         | :large_blue_circle: | 2025/03/07 |             |
+| Insert comments into the BinaryNinja UI.                                                                             |Marcus        | :large_blue_circle: | 2025/03/07 |             |
+| Make it show up as a plugin in the BinaryNinja UI.                                                                   |Louie         | :green_circle:      | 2025/03/07 |             |
+| Implement the translation of BinaryNinja MLIL to use in Z3.                                                          |Marcus        | :large_blue_circle: | 2025/03/07 |             |
+| Coalescing functions to track the inheritance of taint.                                                              |Louie/Marcus  | :red_circle:        | TBD        |             |
+| Develop a Data Structure paired to each group of codeblocks to facilitate the tracking of taint.                     |Marcus        | :red_circle:        | N/A        | N/A         |
