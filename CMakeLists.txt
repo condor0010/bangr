@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
 
 project(bangr CXX C)
 
-find_package(Qt6 COMPONENTS Core Gui Widgets Required)
+#find_package(Qt6 COMPONENTS Core Gui Widgets Required)
 
 add_executable(${PROJECT_NAME}
     src/bangr.cpp
@@ -19,8 +19,10 @@ if(NOT BN_API_BUILD_EXAMPLES AND NOT BN_INTERNAL_BUILD)
     add_subdirectory(${BN_API_PATH} api)
 endif()
 
+#target_link_libraries(${PROJECT_NAME}
+#    binaryninjaapi binaryninjaui Qt6::Core Qt6::Gui Qt6::Widgets)
 target_link_libraries(${PROJECT_NAME}
-    binaryninjaapi binaryninjaui Qt6::Core Qt6::Gui Qt6::Widgets)
+    binaryninjaapi)
 
 if (NOT WIN32)
     target_link_libraries(${PROJECT_NAME}
@@ -49,6 +51,7 @@ set_target_properties(Bangr PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/out/bin
     HEADLESS 1)
 
-target_link_libraries(Bangr PUBLIC binaryninjaapi binaryninjaui Qt6::Core Qt6::Gui Qt6::Widgets)
+target_link_libraries(Bangr PUBLIC binaryninjaapi)
+#target_link_libraries(Bangr PUBLIC binaryninjaapi binaryninjaui Qt6::Core Qt6::Gui Qt6::Widgets)
 
 bn_install_plugin(Bangr)

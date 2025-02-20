@@ -1,3 +1,4 @@
+#include <string>
 #include <inttypes.h>
 #include <iostream>
 #include <cinttypes>
@@ -8,6 +9,7 @@
 #include <mutex>
 #include <future>
 #include <atomic>
+#include <format>
 
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
@@ -19,7 +21,83 @@ struct VariableOperations {
     std::vector<std::pair<std::string, uint64_t>> operations; // Pair of operation description and block address
 };
 
+// TODO: Up for review. Do we need parents?
+struct SSAVarInfo {
+    std::vector<uint64_t> addresses;
+    // ssa var names whose taint this var derives its taint from
+    std::vector<std::string> parents;
+    // ssa var names whose taint is dependent on this one
+    std::vector<std::string> children;
+    int taintLevel;
+};
+
+typedef std::unordered_map<std::string, SSAVarInfo> VarTaintMap;
+
 std::mutex outputMutex;
+
+std::string commentHeader = "Taint Levels:";
+
+void propagateTaint(VarTaintMap taintMap, std::string varName) {
+    SSAVarInfo varInfo = taintMap.at(varName);
+    std::vector<std::string> children = varInfo.children;
+    for (const auto& child: children) {
+        // TODO: Change the taint of this child based on the taint of its parent(s)
+        propagateTaint(taintMap, child);
+    }
+}
+
+std::pair<size_t, std::vector<std::string>> parseCommentForAddress(Ref<Function> function, uint64_t addr) {
+    std::string element;
+    std::vector<std::string> commentLines;
+    std::stringstream ss(function->GetCommentForAddress(addr));
+    size_t index = 0;
+    size_t ctr = 0;
+    while (std::getline(ss, element, '\n')) {
+        if (element.find(commentHeader)) {
+            index = ctr;
+        }
+        commentLines.push_back(element);
+        ctr++;
+    }
+    std::pair<size_t, std::vector<std::string>> commentPair;
+    commentPair.first = index;
+    commentPair.second = commentLines;
+    return commentPair;
+}
+
+void commentTaint(Ref<Function> function, VarTaintMap varMap) {
+    // make sure when commenting you don't overwrite a comment that was already there
+    for (const auto& pair: varMap) {
+        for (auto address: pair.second.addresses) {
+            std::pair<size_t, std::vector<std::string>> commentPair = parseCommentForAddress(function, address);
+            size_t index = commentPair.first;
+            std::vector<std::string> parsedComment = commentPair.second;
+            if (index == -1) {
+                parsedComment.push_back(commentHeader);
+                parsedComment.push_back(std::format("{}: {}", pair.first, pair.second.taintLevel));
+            } else {
+                bool found = false;
+                for (size_t i = index+1; i < parsedComment.size(); i++) {
+                    if (parsedComment[i].find(pair.first) == 0) {
+                        parsedComment[i] = std::format("{}: {}", pair.first, pair.second.taintLevel);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    parsedComment.push_back(std::format("{}: {}", pair.first, pair.second.taintLevel));
+                }
+            }
+            std::stringstream ss;
+            for (size_t i = 0; i < parsedComment.size(); i++) {
+                ss << parsedComment[i] << endl;
+            }
+            std::string comment = ss.str();
+            comment.pop_back();
+            function->SetCommentForAddress(address, comment);
+        }
+    }
+}
 
 std::map<SSAVariable, VariableOperations>* blockAnalyze(Ref<BasicBlock>* basicBlock, std::map<SSAVariable, VariableOperations>* variableOps) {
     Ref<BasicBlock> block = *basicBlock;

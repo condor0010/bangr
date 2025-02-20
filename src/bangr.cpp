@@ -6,9 +6,9 @@
 #include <sstream>
 #include <iostream>
 
-#include "uitypes.h"
-#include "uicontext.h"
-#include "viewframe.h"
+//#include "uitypes.h"
+//#include "uicontext.h"
+//#include "viewframe.h"
 #include "functionAnalyze.h"
 #include "binaryninjaapi.h"
 #include "binaryninjacore.h"
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
+/*
 Ref<Function> GetSelectedFunction(BinaryView* bv)
 {
     // Get the current active UI context
@@ -90,7 +90,8 @@ void RunBangr(BinaryView *view) {
 
     std::system("pkill bangr");
 }
-
+*/
+/*
 extern "C" {
     BN_DECLARE_CORE_ABI_VERSION
     BN_DECLARE_UI_ABI_VERSION
@@ -104,4 +105,4 @@ extern "C" {
         return true;
     }
 }
-
+*/
