@@ -1,0 +1,122 @@
+# format: MLIL_operation,[affected_vars],[src_vars]
+Control Flow
+MLIL_JUMP
+MLIL_JUMP_TO
+MLIL_CALL
+MLIL_CALL_UNTYPED
+MLIL_CALL_OUTPUT
+MLIL_CALL_PARAM
+MLIL_RET
+MLIL_NORET
+MLIL_IF
+MLIL_GOTO
+MLIL_TAILCALL
+MLIL_TAILCALL_UNTYPED
+MLIL_SYSCALL
+MLIL_SYSCALL_UNTYPED
+
+Variable Reads and Writes
+MLIL_SET_VAR,[dest],[src],o
+MLIL_SET_VAR_ALIASED,[prev],[src],o
+MLIL_SET_VAR_ALIASED_FIELD,[prev+offset],[src],o
+MLIL_SET_VAR_FIELD,[dest+offset],[src],o  # offset?
+MLIL_SET_VAR_SPLIT,[high,low],[src],o
+MLIL_LOAD,[],[src-size],a
+MLIL_LOAD_STRUCT,[],[src+offset],a
+MLIL_STORE,[dest-size],[src-size],o
+MLIL_STORE_STRUCT,[dest+offset-size],[src],o
+MLIL_VAR,[],[src],a
+MLIL_VAR_ALIASED,[],[src],a  # A variable expression src that is known to have other variables pointing to the same destination
+MLIL_VAR_ALIASED_FIELD,[],[],a  # not documented
+MLIL_VAR_FIELD,[],[src+offset],a
+MLIL_VAR_SPLIT,[],[high,low],a
+MLIL_VAR_PHI,[dest],[src],p
+MLIL_MEM_PHI,[dest_memory],[src_memory],p  # these are numbers, append to mem with pound sign
+MLIL_ADDRESS_OF,[],[src],a  # src should be the address
+MLIL_ADDRESS_OF_FIELD,[],[address+offset],a # address is of var 'src'
+MLIL_CONST,[],[constant],a
+MLIL_CONST_DATA,[],[constant],a # constant data reference
+MLIL_CONST_PTR,[],[constant],a
+MLIL_EXTERN_PTR,[],[constant+symbol],a
+MLIL_FLOAT_CONST,[],[constant],a
+MLIL_IMPORT,[],[constant],a
+MLIL_LOW_PART,[],[src-size],a
+
+# format: MLIL_operation,[src_vars],[affecting_regs]
+Arithmetic Operations
+MLIL_ADD,[left,right],[],i
+MLIL_ADC,[left,right],[carry],[],i
+MLIL_SUB,[left,right],[],i
+MLIL_SBB,[left,right],[carry],i
+MLIL_AND,[left,right],[],i
+MLIL_OR,[left,right],[],i
+MLIL_XOR,[left,right],[],i
+MLIL_LSL,[left],[right],i  # right is num shift
+MLIL_LSR,[left],[right],i
+MLIL_ASR,[left],[right],i
+MLIL_ROL,[left],[right],i
+MLIL_RLC,[left],[right,carry],i  # idk what is the carry
+MLIL_ROR,[left],[right],i
+MLIL_RRC,[left],[right,carry],i  # idk what the carry is
+MLIL_MUL,[left,right],[],i
+MLIL_MULU_DP,[left,right],[],i  # output size is double size input
+MLIL_MULS_DP,[left,right],[],i  # output size is double size input
+MLIL_DIVU,[left,right],[],i  # for the divs, how does taint propagate in this case?
+MLIL_DIVU_DP,[left,right],[],i
+MLIL_DIVS,[left,right],[],i
+MLIL_DIVS_DP,[left,right],[],i
+MLIL_MODU,[left,right],[],i  # for mods, same as divs
+MLIL_MODU_DP,[left,right],[],i
+MLIL_MODS,[left,right],[],i
+MLIL_MODS_DP,[left,right],[],i
+MLIL_NEG,[src],[],o  # oto
+MLIL_NOT,[src],[],o  # oto
+MLIL_FADD,[left,right],[],i
+MLIL_FSUB,[left,right],[],i
+MLIL_FMUL,[left,right],[],i
+MLIL_FDIV,[left,right],[],i
+MLIL_FSQRT,[left,right],[],i  # how does the taint propagate here?
+MLIL_FNEG,[src],[],o
+MLIL_FABS,[src],[],o
+MLIL_FLOAT_TO_INT,[src],[],o
+MLIL_INT_TO_FLOAT,[src],[],o
+MLIL_FLOAT_CONV,[src],[],o
+MLIL_ROUND_TO_INT,[src],[],o
+MLIL_FLOOR,[src],[],i
+MLIL_CEIL,[src],[],i
+MLIL_FTRUNC,[src],[],i
+MLIL_SX,[src],[],o
+MLIL_ZX,[src],[],o
+MLIL_ADD_OVERFLOW,[left,right],[],i
+MLIL_BOOL_TO_INT,[src],[],i
+
+Comparison Instructions
+MLIL_CMP_E
+MLIL_CMP_NE
+MLIL_CMP_SLT
+MLIL_CMP_ULT
+MLIL_CMP_SLE
+MLIL_CMP_ULE
+MLIL_CMP_SGE
+MLIL_CMP_UGE
+MLIL_CMP_SGT
+MLIL_CMP_UGT
+MLIL_TEST_BIT
+MLIL_FCMP_E
+MLIL_FCMP_NE
+MLIL_FCMP_LT
+MLIL_FCMP_LE
+MLIL_FCMP_GE
+MLIL_FCMP_GT
+MLIL_FCMP_O
+MLIL_FCMP_UO
+
+Miscellaneous Instructions
+MLIL_NOP
+MLIL_BP
+MLIL_TRAP
+MLIL_INTRINSIC
+MLIL_FREE_VAR_SLOT
+MLIL_UNDEF
+MLIL_UNIMPL
+MLIL_UNIMPL_MEM
