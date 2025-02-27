@@ -53,7 +53,7 @@ build/out/bin/bangr test_bins/num 0x00401146
 | Task                                                                                                                 | Person | State                     | Due Date   | Commit Hash |
 |----------------------------------------------------------------------------------------------------------------------|--------|---------------------------|------------|-------------|
 | Setting up multi-threading by functions.                                                                             |Louie         | :large_blue_circle: | 2025/03/07 |             |
-| Reorganizing SSA operations into sets based off their taint level.                                                   |Dylan         | :large_blue_circle: | 2025/03/07 |             |
+| Reorganizing SSA operations into sets based off their taint level.                                                   |Dylan         | :green_circle: | 2025/03/07 |             |
 | Insert comments into the BinaryNinja UI.                                                                             |Marcus        | :large_blue_circle: | 2025/03/07 |             |
 | Make it show up as a plugin in the BinaryNinja UI.                                                                   |Louie         | :green_circle:      | 2025/03/07 |             |
 | Implement the translation of BinaryNinja MLIL to use in Z3.                                                          |Marcus        | :large_blue_circle: | 2025/03/07 |             |
