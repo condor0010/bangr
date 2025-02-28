@@ -2,3 +2,4 @@ build
 test_bins/simple
 *.swp
 ssa_ops/tmp/
+__pycache__/

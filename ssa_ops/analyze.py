@@ -1,7 +1,7 @@
 import sys
 import binaryninja
 from collections import deque
-from mlil_op_map import op_map
+import mlil_op_map
 
 # 3 types of mlil instructions: one-to-one, inherited, atomic.
 # `one-to-one means` means the operation will propagate the
@@ -19,20 +19,23 @@ from mlil_op_map import op_map
 
 class VarInfo():
     def __init__(self, ssa_var):
-        self.operation = ssa_var.operation
+        self.var = ssa_var
         self.def_inst = ssa_var.def_site
         self.use_insts = ssa_var.use_sites
-        self.taint_type = []
         self.taint_srcs = []
         self.taint_dests = []
         self._initialize_tsd()
 
     def _initialize_tsd(self):
-        mlil_obj = op_map[self.def_inst.operation]
-        self.taint_type = mlil_obj.taint_type
-        self.taint_srcs = mlil_obj.get_srcs(self.def_inst.src)
-        self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
-        return op_map[self.def_site.operation]
+        print(self.var)
+        srcs = mlil_op_map.doLookup(self.def_inst,0)
+        for src in srcs:
+            key, delta = src
+            if isinstance(key, str):
+                print(f'address: {hex(self.def_inst.address)}\tmlil_op {key:32s}\tdelta: {delta}')
+            else:
+                print(f'address: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
+        #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
 
 def initialize_var_map(ssa_vars):
     for sv in ssa_vars:
@@ -43,7 +46,7 @@ def analyze_block(block): # return map
     var_ops = []
     for inst in block:
         var_ops.append(inst)
-        print(inst.operation)
+        #print(inst.operation)
         if inst.operation == 'MLIL_SET_VAR':
             continue
         elif inst.operation == 'MLIL_SET_VAR_ALIASED':
@@ -201,13 +204,16 @@ def walk_graph(first_block, ssa_vars):
 def analyze_function(mlil_ssa_func):
     bbs = mlil_ssa_func.basic_blocks
     ssa_vars = mlil_ssa_func.vars
-    walk_graph(bbs[0], ssa_vars) # assumes index 0 is first block
+    #walk_graph(bbs[0], ssa_vars) # assumes index 0 is first block
+    for var in ssa_vars:
+        if var.def_site:
+            VarInfo(var)
 
 if len(sys.argv) != 2:
-    print(sys.argv)
+    print("Usage: python3 analyze.py [path to binary]")
     exit()
 
-with binaryninja.open_view(sys.argv[1]) as bv:
+with binaryninja.load(sys.argv[1]) as bv:
     for function in bv.functions:
         print(function.name)
         analyze_function(function.mlil.ssa_form)
