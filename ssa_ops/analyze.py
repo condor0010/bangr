@@ -1,8 +1,55 @@
-def blockAnalyze(block, variable_ops): # return map
+import sys
+import binaryninja
+from collections import deque
+import mlil_op_map
+
+# 3 types of mlil instructions: one-to-one, inherited, atomic.
+# `one-to-one means` means the operation will propagate the
+# same taint as one of the parent variables no matter what.
+# `inherited` means the operation will decrement the taint of
+# the most tainted parent variable (may change to be more precise)
+# `atomic` means that this operation actually just holds an variable,
+# so we'll just look up the taint of this variable for use within the
+# encompasing operation.
+
+# when looking at ssa vars, we need their def site (.def_site), their
+# use sites (.use_site), the blocks they belong to (.il_basic_block),
+# overall op is inherited or oto, the ssa_var parent(s) that are
+# inherited from, the children that they affect
+
+class VarInfo():
+    def __init__(self, ssa_var):
+        self.var = ssa_var
+        self.def_inst = ssa_var.def_site
+        self.use_insts = ssa_var.use_sites
+        self.taint_srcs = []
+        self.taint_dests = []
+        self._initialize_tsd()
+
+    def _initialize_tsd(self):
+        print(self.var)
+        srcs = mlil_op_map.doLookup(self.def_inst,0)
+        for src in srcs:
+            key, delta = src
+            if isinstance(key, str):
+                print(f'address: {hex(self.def_inst.address)}\tmlil_op {key:32s}\tdelta: {delta}')
+            else:
+                print(f'address: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
+        #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
+
+def initialize_var_map(ssa_vars):
+    for sv in ssa_vars:
+        sv.def_site
+        sv.use_sites
+
+def analyze_block(block): # return map
+    var_ops = []
     for inst in block:
+        var_ops.append(inst)
+        #print(inst.operation)
         if inst.operation == 'MLIL_SET_VAR':
             continue
-        elif ins.operation == 'MLIL_SET_VAR_ALIASED':
+        elif inst.operation == 'MLIL_SET_VAR_ALIASED':
             continue
         elif inst.operation == 'MLIL_SET_VAR':
             continue
@@ -144,3 +191,29 @@ def blockAnalyze(block, variable_ops): # return map
             continue
         elif inst.operation == 'MLIL_BOOL_TO_INT':
             continue
+
+def walk_graph(first_block, ssa_vars):
+    seen_blocks = {first_block}
+    next_blocks = deque()
+    next_blocks.append(first_block)
+    while len(next_blocks) != 0:
+        next_block = next_blocks.popleft()
+        analyze_block(next_block)
+        [(next_blocks.append(child),seen_blocks.add(child)) for child in [edge.target for edge in next_block.outgoing_edges] if child not in seen_blocks]
+
+def analyze_function(mlil_ssa_func):
+    bbs = mlil_ssa_func.basic_blocks
+    ssa_vars = mlil_ssa_func.vars
+    #walk_graph(bbs[0], ssa_vars) # assumes index 0 is first block
+    for var in ssa_vars:
+        if var.def_site:
+            VarInfo(var)
+
+if len(sys.argv) != 2:
+    print("Usage: python3 analyze.py [path to binary]")
+    exit()
+
+with binaryninja.load(sys.argv[1]) as bv:
+    for function in bv.functions:
+        print(function.name)
+        analyze_function(function.mlil.ssa_form)
