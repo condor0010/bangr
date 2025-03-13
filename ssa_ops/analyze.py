@@ -12,11 +12,13 @@ import mlil_op_map
 # so we'll just look up the taint of this variable for use within the
 # encompasing operation.
 
+# for debugging:
+unknown_ops = {}
+
 # when looking at ssa vars, we need their def site (.def_site), their
 # use sites (.use_site), the blocks they belong to (.il_basic_block),
 # overall op is inherited or oto, the ssa_var parent(s) that are
 # inherited from, the children that they affect
-
 class VarInfo():
     def __init__(self, ssa_var):
         self.var = ssa_var
@@ -32,6 +34,10 @@ class VarInfo():
         for src in srcs:
             key, delta = src
             if isinstance(key, str):
+                if key in unknown_ops:
+                    unknown_ops[key].add(self.def_inst.address)
+                else:
+                    unknown_ops[key] = {self.def_inst.address}
                 print(f'address: {hex(self.def_inst.address)}\tmlil_op {key:32s}\tdelta: {delta}')
             else:
                 print(f'address: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
@@ -201,6 +207,16 @@ def walk_graph(first_block, ssa_vars):
         analyze_block(next_block)
         [(next_blocks.append(child),seen_blocks.add(child)) for child in [edge.target for edge in next_block.outgoing_edges] if child not in seen_blocks]
 
+# for debugging
+def print_unkown_ops():
+    # will print out ops that are unaccounted for
+    for k, l in unknown_ops.items():
+        print(f'Unknown Operation: {k}')
+        print(f'\tOccurrences:')
+        for e in l:
+            print(f'\t\t{hex(e)}')
+
+
 def analyze_function(mlil_ssa_func):
     bbs = mlil_ssa_func.basic_blocks
     ssa_vars = mlil_ssa_func.vars
@@ -217,3 +233,4 @@ with binaryninja.load(sys.argv[1]) as bv:
     for function in bv.functions:
         print(function.name)
         analyze_function(function.mlil.ssa_form)
+    print_unkown_ops()
