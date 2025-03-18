@@ -13,7 +13,9 @@ import mlil_op_map
 # encompasing operation.
 
 # for debugging:
-unknown_ops = {}
+unknown_src_ops = {}
+unknown_dest_ops = {}
+unanalyzed_funcs = []
 
 # when looking at ssa vars, we need their def site (.def_site), their
 # use sites (.use_site), the blocks they belong to (.il_basic_block),
@@ -23,6 +25,8 @@ class VarInfo():
     def __init__(self, ssa_var):
         self.var = ssa_var
         self.def_inst = ssa_var.def_site
+        # use site not necessarily on rhs, see below example where rax_86#198 is var in question:
+        # [r13_4#31 + rax_86#198].d = rdx_54#109 @ mem#101 -> mem#102
         self.use_insts = ssa_var.use_sites
         self.taint_srcs = []
         self.taint_dests = []
@@ -30,18 +34,31 @@ class VarInfo():
 
     def _initialize_tsd(self):
         print(self.var)
-        srcs = mlil_op_map.doLookup(self.def_inst,0)
+        srcs = mlil_op_map.lookupSrcs(self.def_inst,0)
+        print(f'\tsrcs:')
         for src in srcs:
             key, delta = src
             if isinstance(key, str):
-                if key in unknown_ops:
-                    unknown_ops[key].add(self.def_inst.address)
+                if key in unknown_src_ops:
+                    unknown_src_ops[key].add(self.def_inst.address)
                 else:
-                    unknown_ops[key] = {self.def_inst.address}
-                print(f'address: {hex(self.def_inst.address)}\tmlil_op {key:32s}\tdelta: {delta}')
+                    unknown_src_ops[key] = {self.def_inst.address}
+                print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {key:32s}\tdelta: {delta}')
             else:
-                print(f'address: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
+                print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
         #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
+        print(f'\tdests:')
+        for inst in self.use_insts:
+            dests = mlil_op_map.lookupDest(inst)
+            for dest in dests:
+                if isinstance(dest,str):
+                    if dest in unknown_dest_ops:
+                        unknown_dest_ops[dest].add(inst.address)
+                    else:
+                        unknown_dest_ops[dest] = {inst.address}
+                    print(f'\t\tUnnaccounted for type for dest: {type(inst)}')
+                else:
+                    print(f'\t\taddress: {hex(inst.address)}\tvariable: {dest.var}')
 
 def initialize_var_map(ssa_vars):
     for sv in ssa_vars:
@@ -208,13 +225,23 @@ def walk_graph(first_block, ssa_vars):
         [(next_blocks.append(child),seen_blocks.add(child)) for child in [edge.target for edge in next_block.outgoing_edges] if child not in seen_blocks]
 
 # for debugging
-def print_unkown_ops():
+def print_unknown_ops():
     # will print out ops that are unaccounted for
-    for k, l in unknown_ops.items():
-        print(f'Unknown Operation: {k}')
-        print(f'\tOccurrences:')
+    print('Srcs:')
+    for k, l in unknown_src_ops.items():
+        print(f'\tUnknown Operation: {k}')
+        print(f'\t\tOccurrences:')
         for e in l:
-            print(f'\t\t{hex(e)}')
+            print(f'\t\t\t{hex(e)}')
+    print('Dests:')
+    for k, l in unknown_dest_ops.items():
+        print(f'\tUnknown Operation: {k}')
+        print(f'\t\tOccurrences:')
+        for e in l:
+            print(f'\t\t\t{hex(e)}')
+    print('Unanalyzed Funcs:')
+    for f in unanalyzed_funcs:
+        print(f'\t{f}')
 
 
 def analyze_function(mlil_ssa_func):
@@ -231,6 +258,10 @@ if len(sys.argv) != 2:
 
 with binaryninja.load(sys.argv[1]) as bv:
     for function in bv.functions:
-        print(function.name)
-        analyze_function(function.mlil.ssa_form)
-    print_unkown_ops()
+        mlil_func = function.mlil_if_available
+        if mlil_func is None:
+            unanalyzed_funcs.append(function.name)
+        else:
+            print(function.name)
+            analyze_function(mlil_func.ssa_form)
+    print_unknown_ops()
