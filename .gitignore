@@ -4,3 +4,4 @@ test_bins/simple
 ssa_ops/tmp/
 __pycache__/
 .gdb_history
+binaryninjaapi
