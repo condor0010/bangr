@@ -1,0 +1,15 @@
+{
+    "pluginmetadataversion": 2,
+    "name": "Bangr",
+    "author": "dylan, louie, marcus",
+    "description": "dose a thing",
+    "version": "1.0",
+    "minimumbinaryninjaversion": 3500,
+    "type": ["ui"],
+    "api": "python",
+    "license": {
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT"
+    }
+}
+
