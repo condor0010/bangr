@@ -38,7 +38,7 @@ class VariableListWidget(SidebarWidget):
 
     def _create_table(self):
         table = QTableWidget(0, 3)
-        table.setHorizontalHeaderLabels(["Variable", "Value", "Location"])
+        table.setHorizontalHeaderLabels(["Variable", "Value", "Location"]) # TODO: add type feild
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         return table
     
