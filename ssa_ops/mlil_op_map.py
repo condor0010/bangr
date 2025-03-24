@@ -1,7 +1,15 @@
 from binaryninja import MediumLevelILOperation
 from binaryninja.mediumlevelil import SSAVariable, MediumLevelILConst, MediumLevelILAdd, MediumLevelILConstPtr, MediumLevelILConstData, MediumLevelILVarSsa, MediumLevelILStoreSsa, MediumLevelILImport, MediumLevelILSub
 
+# default addr size. should be overwritten once binary
+# view is opened.
+ADDR_SIZE = None
+
+
+
 class MLILOpInfo():
+    # Note that nothing is done with `get_important`, it just denotes important
+    # info that can be used by z3.
     def __init__(self, taint_type, get_srcs, get_dests=None, get_important=None):
         self.taint_type = taint_type
         self.get_srcs = get_srcs
@@ -12,50 +20,9 @@ class MLILOpInfo():
         self.get_dests = get_dests
         self.get_important = get_important
 
-class Var:
-    def __init__(self, var_obj, offset=0, size=None):
-        self.ssa_var = ssa_var
-        self.offset = offset
-        self.size = size
-
-    def isPtr(self):
-        return False
-
-class ImmVar(Var):
-    def __init__(self, ssa_var=None, offset=None, size=None):
-        super().__init__(ssa_var, offset, size)
-
-class PtrVar(Var):
-    def __init__(self, ssa_var=None, offset=None, size=None, const=None):
-        super().__init__(ssa_var, offset, size)
-        self.const=const
-
-class Token:
-    def __init__(self, var_obj=None):
-        self.var_obj = var_obj
-        self.is_const = False
-        self.is_ptr = False
-        self.is_var = False
-
-class DestToken(Token):
-    def __init__(self, var_obj=None, offset=None, size=None):
-        super().__init__(var_obj,const,offset,size)
-        self._is_valid()
-
-class SrcToken(Token):
-    def __init__(self, var_obj, delta=0, _is_const=False):
-        super().__init__(var_obj,delta)
-        self.const=_is_const
-        isValid()
-
-class Const(SrcToken):
-    def __init__(self, const):
-        super().__init__(var_obj=const)
-        self.is_const = True
-
 # TODO: Size MUST be specified in initialization
 class VarKey():
-    def __init__(self, var, size=8, offset=0, offset_sign='+'): # size should be size of architecture word
+    def __init__(self, var, size=ADDR_SIZE, offset=0, offset_sign='+'):
         self.var = var
         # could be SSAVariable, MediumLevelILConst, or VarKey
         #assert isinstance(var, SSAVariable)
@@ -69,10 +36,45 @@ class VarKey():
         else:
             assert self.size is None
 
-    # TODO: create some sort of key based of the instance info for lookup
-    # in our taint table
+    # TODO
+    # table will be at least 2 layers: first is the var it affects,
+    # next is the part of the var it affects
     def get_key(self):
         return None
+
+# represents a value that must be looked up
+# is a VarKey
+class Element:
+    def __init__(self, src):
+        return None
+
+    def eval(self):
+        return get_taint(self.src)
+
+# represent an operation that directly transfers taint
+class OneToOne:
+    def __init__(self, src):
+        self.src = src
+        return None
+    
+    def eval(self):
+        return self.src.eval()
+
+# represents an operation that will select the highest taint from one or
+# more sources, then decrement it.
+class Inherited:
+    def __init__(self, srcs):
+        self.srcs = srcs
+        return None
+
+    def eval(self):
+        # reminder that the lower the number the higher the taint
+        max_taint = self.srcs[0].eval()
+        for i in range(1, len(self.srcs)):
+            taint = s.eval()
+            if taint < max_taint:
+                max_taint = taint
+        return max_taint + 1
 
 def lookupSrcs(mlil, delta):
     if isinstance(mlil, SSAVariable):
@@ -102,6 +104,7 @@ def srcLoadLookup(mlil, delta, size):
         return [VarKey(next_mlil.left, offset=next_mlil.right, offset_sign='-', size=mlil.size)]
     print(f'Unnaccounted for type at {hex(mlil.address)}: {mlil.operation.name}')
     assert False
+
 
 def lookupDest(mlil):
     if isinstance(mlil, MediumLevelILStoreSsa):
@@ -164,18 +167,19 @@ op_map = {
             get_dests=lambda mlil: [VarKey(mlil.dest)]
         ),
 # Prob when something like `var_c#0:0.d # mem#<x> -> mem#<x+1>` is on LHS
-#    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
-#        MLILOpInfo(
-#            'o',
-#            lambda mlil, delta: lookupSrcs(mlil.src),
-#            get_dests=lambda mlil: [VarKey(mlil.src, size=mlil.size, offset=mlil.offset)]
-#        ),
+    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
+        MLILOpInfo(
+            'o',
+            lambda mlil, delta: lookupSrcs(mlil.src, delta),
+            get_dests=lambda mlil: [VarKey(mlil.src, size=mlil.size, offset=mlil.offset)]
+        ),
 # the below likely looks like `__return_addr#0:0.d` on LHS
     MediumLevelILOperation.MLIL_SET_VAR_SSA_FIELD:
         MLILOpInfo(
             'o',
             lambda mlil, delta: lookupSrcs(mlil.src, delta),
-            get_dests=lambda mlil: [VarKey(mlil.src, size=mlil.size, offset=mlil.offset)]
+            # could there be situation where dest is not an ssa var?
+            get_dests=lambda mlil: [VarKey(mlil.dest, size=mlil.size, offset=mlil.offset)]
         ),
     MediumLevelILOperation.MLIL_SET_VAR_SPLIT_SSA:
         MLILOpInfo(
@@ -223,13 +227,15 @@ op_map = {
             lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size), delta)]
         ),
 # TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`
-#    MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
-#        MLILOpInfo(
-#            'a',
-#            lambda mlil: None
-#        ),
+    MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
+        MLILOpInfo(
+            'a',
+            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size, offset=mlil.offset), delta)]
+        ),
 # TODO: Account for if mlil.src is not an ssa variable
 #       Looks like `__return_addr#0:0.d`) where the second zero is the offset (i think) and the d ofc is the size
+# Could also look like this `2809 @ 001491a3  i_17#2 = i_16#65.r13d` where i_16 is held in r13, but we're only accessing
+# bottom 4 bytes. Might not matter if we do field offsetting correctly.
     MediumLevelILOperation.MLIL_VAR_SSA_FIELD:
         MLILOpInfo(
             'a',
@@ -262,11 +268,11 @@ op_map = {
         ),
 # TODO: This will be special case where addr of field is gotten, so field could be
 # referenced via means of this new pointer that's generated
-#    MediumLevelILOperation.MLIL_ADDRESS_OF_FIELD:
-#        MLILOpInfo(
-#            'a',
-#            lambda mlil, delta: [(mlil.address,mlil.offset)]
-#        ),
+    MediumLevelILOperation.MLIL_ADDRESS_OF_FIELD:
+        MLILOpInfo(
+            'a',
+            lambda mlil, delta: [(mlil.address,mlil.offset)]
+        ),
     MediumLevelILOperation.MLIL_CONST:
         MLILOpInfo(
             'a',

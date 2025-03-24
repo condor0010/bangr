@@ -257,6 +257,7 @@ if len(sys.argv) != 2:
     exit()
 
 with binaryninja.load(sys.argv[1]) as bv:
+    mlil_op_map.ADDR_SIZE = bv.address_size 
     for function in bv.functions:
         mlil_func = function.mlil_if_available
         if mlil_func is None:
