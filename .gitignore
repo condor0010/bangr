@@ -3,3 +3,4 @@ test_bins/simple
 *.swp
 ssa_ops/tmp/
 __pycache__/
+.gdb_history
