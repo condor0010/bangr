@@ -22,40 +22,38 @@ class MLILOpInfo():
 
 # TODO: Size MUST be specified in initialization
 class VarKey():
-    def __init__(self, var, size=ADDR_SIZE, offset=0, offset_sign='+'):
+    def __init__(self, var, size, offset=0, offset_sign='+'):
         self.var = var
         # could be SSAVariable, MediumLevelILConst, or VarKey
         #assert isinstance(var, SSAVariable)
+        print(size)
         self.size = size
         self.offset = offset
         self.offset_sign = offset_sign
         self.var_only = True
         if self.offset is not None:
+            print(self.size)
             assert self.size is not None
             self.var_only = False
         else:
             assert self.size is None
 
+    def __repr__(self):
+        return f'VarKey(v={self.var}, s={self.size}, o={self.offset}, os={self.offset_sign})'
+
     # TODO
     # table will be at least 2 layers: first is the var it affects,
     # next is the part of the var it affects
-    def get_key(self):
-        return None
-
-# represents a value that must be looked up
-# is a VarKey
-class Element:
-    def __init__(self, src):
-        return None
-
     def eval(self):
-        return get_taint(self.src)
+        return None
 
 # represent an operation that directly transfers taint
 class OneToOne:
     def __init__(self, src):
         self.src = src
-        return None
+
+    def __repr__(self):
+        return f'OneToOne({repr(self.src)})'
     
     def eval(self):
         return self.src.eval()
@@ -63,9 +61,13 @@ class OneToOne:
 # represents an operation that will select the highest taint from one or
 # more sources, then decrement it.
 class Inherited:
-    def __init__(self, srcs):
+    def __init__(self, *srcs):
+        assert len(srcs) > 0
         self.srcs = srcs
-        return None
+
+    def __repr__(self):
+        internal = ','.join(list(map(lambda s: repr(s), self.srcs)))
+        return f'Inherited({internal})'
 
     def eval(self):
         # reminder that the lower the number the higher the taint
@@ -76,32 +78,35 @@ class Inherited:
                 max_taint = taint
         return max_taint + 1
 
-def lookupSrcs(mlil, delta):
+def lookupSrcs(mlil, size):
     if isinstance(mlil, SSAVariable):
-        return [(VarKey(mlil), delta)]
+        return VarKey(mlil, size)
     if isinstance(mlil, MediumLevelILConst):
-        return [(VarKey(mlil), -1)]
+        return VarKey(mlil, size)
     dict_value = op_map.get(mlil.operation, mlil.operation.name)
+    # debugging
     if isinstance(dict_value, str) or dict_value is None:
-        return [(mlil.operation.name, delta)]
+        return mlil.operation.name
     print(mlil.operation.name)
-    return dict_value.get_srcs(mlil, delta)
+    # continue recursive lookup
+    return dict_value.get_srcs(mlil)
 
-def srcLoadLookup(mlil, delta, size):
+# must return VarKey
+# TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
+def srcLoadLookup(mlil, size):
     if isinstance(mlil, MediumLevelILVarSsa):
-        return [(VarKey(mlil.src, offset=0, size=size), delta)]
+        return VarKey(mlil.src, size, offset=0)
     if isinstance(mlil, MediumLevelILConstData):
         const_data = mlil.const_data
-        return [(VarKey(const_data.value, offset=const_data.offset, size=const_data.size), -1)]
+        return VarKey(const_data.value, size, offset=const_data.offset)
     if isinstance(mlil, MediumLevelILConst) or isinstance(mlil, MediumLevelILConstPtr) or isinstance(mlil, MediumLevelILImport):
-        return [(VarKey(mlil, offset=0, size=size), -1)]
-    # THIS MIGHT NEED SOME WORK, what if load doesn't only have Add as potential op?
+        return VarKey(mlil, size, offset=0)
     if isinstance(mlil, MediumLevelILAdd):
         #op_info = op_map.get(mlil)
         #srcs = op_info.get_srcs(mlil)
-        return [(VarKey(mlil.left, offset=mlil.right, size=size), delta)]
+        return VarKey(mlil.left, size, offset=mlil.right)
     if isinstance(next_mlil, MediumLevelILSub):
-        return [VarKey(next_mlil.left, offset=next_mlil.right, offset_sign='-', size=mlil.size)]
+        return VarKey(next_mlil.left, size, offset=next_mlil.right, offset_sign='-')
     print(f'Unnaccounted for type at {hex(mlil.address)}: {mlil.operation.name}')
     assert False
 
@@ -111,16 +116,16 @@ def lookupDest(mlil):
         # TODO: this is gross
         next_mlil = mlil.dest
         if isinstance(next_mlil, MediumLevelILAdd):
-            return [VarKey(next_mlil.left, offset=next_mlil.right, size=mlil.size)]
+            return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right)]
         if isinstance(next_mlil, MediumLevelILSub):
-            return [VarKey(next_mlil.left, offset=next_mlil.right, offset_sign='-', size=mlil.size)]
+            return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right, offset_sign='-')]
         if isinstance(mlil, MediumLevelILConstData):
             const_data = mlil.const_data
-            return [VarKey(const_data.value, offset=const_data.offset, size=const_data.size)]
+            return [VarKey(const_data.value, const_data.size, offset=const_data.offset)]
         if isinstance(next_mlil, MediumLevelILConst) or isinstance(next_mlil, MediumLevelILConstPtr) or isinstance(next_mlil, MediumLevelILImport):
-            return [VarKey(next_mlil, offset=0, size=next_mlil.size)]
+            return [VarKey(next_mlil, next_mlil.size, offset=0)]
         if isinstance(next_mlil, MediumLevelILVarSsa):
-            return [VarKey(next_mlil.src, offset=0, size=next_mlil.size)]
+            return [VarKey(next_mlil.src, next_mlil.size, offset=0)]
         print(f'Unaccounted for type in StoreSsa Dest at {hex(mlil.address)}: {next_mlil.operation.name}')
         assert False
     dict_value = op_map.get(mlil.operation, mlil.operation.name)
@@ -129,18 +134,19 @@ def lookupDest(mlil):
     print(mlil.operation.name)
     return dict_value.get_dests(mlil)
 
+# TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
 def destStoreLookup(mlil, size):
     if isinstance(next_mlil, MediumLevelILAdd):
-        return [VarKey(next_mlil.left, offset=next_mlil.right, size=mlil.size)]
+        return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right)]
     if isinstance(next_mlil, MediumLevelILSub):
-        return [VarKey(next_mlil.left, offset=next_mlil.right, offset_sign='-', size=mlil.size)]
+        return [VarKey(next_mlil.left, mlil.size,offset=next_mlil.right, offset_sign='-')]
     if isinstance(mlil, MediumLevelILConstData):
         const_data = mlil.const_data
-        return [VarKey(const_data.value, offset=const_data.offset, size=const_data.size)]
+        return [VarKey(const_data.value, const_data.size, offset=const_data.offset)]
     if isinstance(next_mlil, MediumLevelILConst) or isinstance(next_mlil, MediumLevelILConstPtr) or isinstance(next_mlil, MediumLevelILImport):
-        return [VarKey(next_mlil, offset=0, size=next_mlil.size)]
+        return [VarKey(next_mlil, next_mlil.size, offset=0)]
     if isinstance(next_mlil, MediumLevelILVarSsa):
-        return [VarKey(next_mlil.src, offset=0, size=next_mlil.size)]
+        return [VarKey(next_mlil.src, next_mlil.size, offset=0)]
     print(f'Unaccounted for type in StoreSsa Dest at {hex(mlil.address)}: {next_mlil.operation.name}')
     assert False
 
@@ -150,87 +156,86 @@ def destStoreLookup(mlil, size):
 # constant info properly, or at least handle it.
 # TODO: create get_dests for every atomic operation
 
-# lookup: op_map[mlil.operation].get_srcs(mlil.attr, delta+1)
-# retval for sources is an array of tuples where the first in the tuple is a VarKey, while the second is the delta.
+# lookup: op_map[mlil.operation].get_srcs(mlil.attr)
 op_map = {
     MediumLevelILOperation.MLIL_SET_VAR_SSA:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta),
-            get_dests=lambda mlil: [VarKey(mlil.dest)]
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
         ),
 # TODO: Account for special case
     MediumLevelILOperation.MLIL_SET_VAR_ALIASED:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta),
-            get_dests=lambda mlil: [VarKey(mlil.dest)]
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
         ),
 # Prob when something like `var_c#0:0.d # mem#<x> -> mem#<x+1>` is on LHS
     MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta),
-            get_dests=lambda mlil: [VarKey(mlil.src, size=mlil.size, offset=mlil.offset)]
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size, offset=mlil.offset)]
         ),
 # the below likely looks like `__return_addr#0:0.d` on LHS
     MediumLevelILOperation.MLIL_SET_VAR_SSA_FIELD:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta),
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
             # could there be situation where dest is not an ssa var?
-            get_dests=lambda mlil: [VarKey(mlil.dest, size=mlil.size, offset=mlil.offset)]
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, offset=mlil.offset)]
         ),
     MediumLevelILOperation.MLIL_SET_VAR_SPLIT_SSA:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta),
-            get_dests=lambda mlil: [VarKey(mlil.high), VarKey(mlil.low)]
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.high, mlil.size), VarKey(mlil.low, mlil.size)]
         ),
 # src could just be const or ssa_var, but could also be an MLIL_ADD
     MediumLevelILOperation.MLIL_LOAD_SSA:
         MLILOpInfo(
             'a',
             # can be const, ssa var, or either with an offset via MLIL_ADD
-            lambda mlil, delta: srcLoadLookup(mlil.src, delta, mlil.size)
+            lambda mlil: srcLoadLookup(mlil.src, mlil.size)
         ),
     MediumLevelILOperation.MLIL_LOAD_STRUCT_SSA:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size, offset=mlil.offset), delta)]
+            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
         ),
 # dest could just be const or ssa_var, but could also be an MLIL_ADD
     MediumLevelILOperation.MLIL_STORE_SSA:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta, mlil.size),
-            get_dests=lambda mlil: srcLoadLookup(mlil.dest, 0, mlil.size)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: srcLoadLookup(mlil.dest, mlil.size)
         ),
     MediumLevelILOperation.MLIL_STORE_STRUCT_SSA:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src, delta),
-            get_dests=lambda mlil: [VarKey(mlil.dest, size=mlil.size, offset=mlil.offset)]
-            #get_dests=lambda mlil: srcLoadLookup(mlil.mlil, delta, mlil.size)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, offset=mlil.offset)]
+            #get_dests=lambda mlil: srcLoadLookup(mlil.mlil, mlil.size)
         ),
     MediumLevelILOperation.MLIL_VAR_SSA:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size),delta)],
-            get_dests=lambda mlil: [VarKey(mlil.src, size=mlil.size)]
+            lambda mlil: VarKey(mlil.src, mlil.size),
+            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size)]
         ),
     # TODO: This is a special case, whatever this is set equal to will have the same
     #       taint entry as this
-    MediumLevelILOperation.MLIL_VAR_ALIASED:
-        MLILOpInfo(
-            'a',  # technically also oto
-            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size), delta)]
-        ),
+#    MediumLevelILOperation.MLIL_VAR_ALIASED:
+#        MLILOpInfo(
+#            'a',  # technically also oto
+#            lambda mlil: VarKey(mlil.src, size=mlil.size)
+#        ),
 # TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`
     MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size, offset=mlil.offset), delta)]
+            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
         ),
 # TODO: Account for if mlil.src is not an ssa variable
 #       Looks like `__return_addr#0:0.d`) where the second zero is the offset (i think) and the d ofc is the size
@@ -239,18 +244,19 @@ op_map = {
     MediumLevelILOperation.MLIL_VAR_SSA_FIELD:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size, offset=mlil.offset),delta)]
+            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
         ),
-    MediumLevelILOperation.MLIL_VAR_SPLIT_SSA:
-        MLILOpInfo(
-            'a',
-            lambda mlil, delta: [(VarKey(mlil.high),delta), (VarKey(mlil.low),delta)]
-        ),
+# find example of VAR_SPLIT being used, likely just an Inherited use case
+#    MediumLevelILOperation.MLIL_VAR_SPLIT_SSA:
+#        MLILOpInfo(
+#            'a',
+#            lambda mlil: Inherited(VarKey(mlil.high, mlil.size), (VarKey(mlil.low, mlil.size)))
+#        ),
     MediumLevelILOperation.MLIL_VAR_PHI:
         MLILOpInfo(
             'p',
-            lambda mlil, delta: map(lambda src: (VarKey(src),delta), mlil.src),
-            get_dests=lambda mlil: [VarKey(mlil.dest)]
+            lambda mlil: list(map(lambda src: (VarKey(src, mlil.size)), mlil.src)),
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
         ),
 # TODO: account for MEM_PHI
 #    MediumLevelILOperation.MLIL_MEM_PHI:
@@ -264,285 +270,285 @@ op_map = {
         MLILOpInfo(
             'a',
             #TODO src could be of type `binaryninja.variable.Variable`
-            lambda mlil, delta: [(VarKey(mlil.src), delta)] # ensure size is default size of pointer
+            lambda mlil: VarKey(mlil.src, mlil.size) # size technically comes to 0
         ),
 # TODO: This will be special case where addr of field is gotten, so field could be
 # referenced via means of this new pointer that's generated
     MediumLevelILOperation.MLIL_ADDRESS_OF_FIELD:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(mlil.address,mlil.offset)]
+            lambda mlil: VarKey(mlil.address, mlil.size, mlil.offset)
         ),
     MediumLevelILOperation.MLIL_CONST:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.constant, size=mlil.size),-1)]
+            lambda mlil: VarKey(mlil.constant, mlil.size)
         ),
     MediumLevelILOperation.MLIL_CONST_DATA:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.constant_data.value, offset=mlil.constant_data.offset, size=mlil.constant_data.size),-1)]
+            lambda mlil: VarKey(mlil.constant_data.value, mlil.constant_data.size, offset=mlil.constant_data.offset)
         ),
     MediumLevelILOperation.MLIL_CONST_PTR:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.constant, size=mlil.size),-1)]
+            lambda mlil: VarKey(mlil.constant, mlil.size)
         ),
 # TODO: Special case, how do we treat it?
 #    MediumLevelILOperation.MLIL_EXTERN_PTR:
 #        MLILOpInfo(
 #            'a',
-#            lambda mlil, delta: [(mlil.constant,mlil.symbol)]
+#            lambda mlil: [(mlil.constant,mlil.symbol)]
 #        ),
     MediumLevelILOperation.MLIL_FLOAT_CONST:
         MLILOpInfo(
             'a',
-            lambda mlil, delta: [(VarKey(mlil.constant, size=mlil.size),-1)]
+            lambda mlil: VarKey(mlil.constant, mlil.size)
         ),
     MediumLevelILOperation.MLIL_IMPORT:
         MLILOpInfo(
            'a',
-           lambda mlil, delta: [(VarKey(mlil.constant, size=mlil.size),0)]
+           lambda mlil: VarKey(mlil.constant, mlil.size)
         ),
     MediumLevelILOperation.MLIL_LOW_PART:
         MLILOpInfo(
            'a',
-           lambda mlil, delta: [(VarKey(mlil.src, size=mlil.size, offset=0),delta)]
+           lambda mlil: VarKey(mlil.src, mlil.size, offset=0)
         ),
     MediumLevelILOperation.MLIL_ADD:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_ADC:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size)),
             get_important=lambda mlil: [mlil.carry] # TODO: not doing anything with this atm
         ),
     MediumLevelILOperation.MLIL_SUB:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_SBB:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size)),
             get_important=lambda mlil: [mlil.carry]
         ),
     MediumLevelILOperation.MLIL_AND:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_OR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_XOR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_LSL:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
-            get_important=lambda mlil: [lookupSrcs(mlil.right)]
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
+            get_important=lambda mlil: [lookupSrcs(mlil.right, mlil.size)]
         ),
     MediumLevelILOperation.MLIL_LSR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right] # TODO: not doing anything with this atm
         ),
     MediumLevelILOperation.MLIL_ASR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right]
         ),
     MediumLevelILOperation.MLIL_ROL:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right]
         ),
     MediumLevelILOperation.MLIL_RLC:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right,mlil.carry]
         ),
     MediumLevelILOperation.MLIL_ROR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right]
         ),
     MediumLevelILOperation.MLIL_RRC:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1),
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size)),
             get_important=lambda mlil: [mlil.right,mlil.carry]
         ),
     MediumLevelILOperation.MLIL_MUL:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_MULU_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_MULS_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_DIVU:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_DIVU_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_DIVS:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_DIVS_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1) 
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size)) 
         ),
     MediumLevelILOperation.MLIL_MODU:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_MODU_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_MODS:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_MODS_DP:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_NEG:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_NOT:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FADD:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FSUB:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1),
-            get_dests=lambda mlil: [VarKey(mlil.left, size=mlil.size)]
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.left, mlil.size)]
         ),
     MediumLevelILOperation.MLIL_FMUL:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FDIV:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FSQRT:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FNEG:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FABS:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FLOAT_TO_INT:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_INT_TO_FLOAT:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FLOAT_CONV:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_ROUND_TO_INT:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FLOOR:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_CEIL:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_FTRUNC:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_SX:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_ZX:
         MLILOpInfo(
             'o',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta)
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size))
         ),
     MediumLevelILOperation.MLIL_ADD_OVERFLOW:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.left,delta+1) + lookupSrcs(mlil.right,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.left, mlil.size), lookupSrcs(mlil.right, mlil.size))
         ),  # TODO: this might be incorrect, could have undocumented overflow property, verify in binaja
     MediumLevelILOperation.MLIL_BOOL_TO_INT:
         MLILOpInfo(
             'i',
-            lambda mlil, delta: lookupSrcs(mlil.src,delta+1)
+            lambda mlil: Inherited(lookupSrcs(mlil.src, mlil.size))
         )
 }
 

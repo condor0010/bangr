@@ -4,11 +4,13 @@
 #include <stdint.h>
 
 int main(int argc, char **argv) {
-    int data = 0;
-    int result = 0;
+    uint64_t data = 0;
+    uint64_t result = 0;
+    uint64_t dividend = 1;
+    dividend = dividend << 33;
     if (argc > 2)
         data = 10;
-    result = 100/data;
+    result = dividend/data;
     printf("Result: %d\n", result);
     return 0;
 }

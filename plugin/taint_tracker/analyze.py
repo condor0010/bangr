@@ -34,18 +34,17 @@ class VarInfo():
 
     def _initialize_tsd(self):
         print(self.var)
-        srcs = mlil_op_map.lookupSrcs(self.def_inst,0)
+        src = mlil_op_map.lookupSrcs(self.def_inst,0)
         print(f'\tsrcs:')
-        for src in srcs:
-            key, delta = src
-            if isinstance(key, str):
-                if key in unknown_src_ops:
-                    unknown_src_ops[key].add(self.def_inst.address)
-                else:
-                    unknown_src_ops[key] = {self.def_inst.address}
-                print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {key:32s}\tdelta: {delta}')
+        key = src
+        if isinstance(key, str):
+            if key in unknown_src_ops:
+                unknown_src_ops[key].add(self.def_inst.address)
             else:
-                print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {key.var}\tdelta: {delta}')
+                unknown_src_ops[key] = {self.def_inst.address}
+            print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {key:32s}')
+        else:
+            print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(key)}')
         #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
         print(f'\tdests:')
         for inst in self.use_insts:
