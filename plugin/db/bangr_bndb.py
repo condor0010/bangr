@@ -1,90 +1,100 @@
-from binaryninja import BinaryView, Metadata
-import json, zlib, base64
 
-class bangr_bndb:
+import json, zlib, base64
+from binaryninja import BinaryView
+
+class BangrBndb:
     """
     A wrapper to the BinaryNinja bndb API.
     """
     
     def __init__(self, bangr_bv:BinaryView):
-        """
-        A wrapper to the BinaryNinja bndb API.
+        """A wrapper to the BinaryNinja bndb API.
 
         Args:
             bangr_bv (BinaryView): The current BinaryView.
         """
         self.__bv: BinaryView = bangr_bv
         
-    def store(self, key: str, value, compress: bool | None) -> str | None:
-        """
-        Stores a python data structure supported by the json module to the bndb.
+    def store(self, key: str, value, compress: bool | None = None) -> int | None:
+        """Stores a python data structure supported by the json module to the bndb.
+
         Args:
             key (str): The key to paired with the data in the bndb.
             value (Any): The python data structure to be stored to the bndb.
             compress (bool | None): Compress the data with zlib.
 
         Returns:
-            str | None: This function will return the json string saved to the bndb.
+            str | None: This function will return the size of the data saved to the bndb.
         """
         
-        written_type = type(value).__name__
-        md = self.__encode(value, written_type, compress)
-        self.__bv.store_metadata(key, md)
-        return md
+        md = self.__encode(value, compress)
+
+        if md is not None:
+            self.__bv.store_metadata(key, md)
+            # print(md)
+            return len(md)
+        else:
+            return None
 
         
     
-    def __encode(self, value, type: str, compress: bool | None) -> str:
+    def __encode(self, value, compress: bool | None  = None) -> str | None:
         """Encodes the data in json.
 
         Args:
             value (Any): The data that is being serialized to json.
-            type (str): The type of the data.
             compress (bool | None): Compress the data with zlib.
 
         Returns:
-            str: This function will return the json serialized string of the 'value' parameter.
+            str | None: This function will return the json serialized string of the 'value' parameter.
         """
         
-        json_data = json.dumps(value).encode("ascii")
+        try:
+            json_data = json.dumps(value).encode("ascii")
+        except TypeError:
+            return None
         
         if compress is not None and compress:
-            return json.dumps({"type":f"{type}", "b64":base64.b64encode(zlib.compress(json_data)).decode("utf-8")})
+            try:
+                return json.dumps({"bangr_type":f"{type(value).__name__}", "b64":base64.b85encode(zlib.compress(json_data, 9)).decode("utf-8")})
+            except TypeError:
+                return None
         else:
-            return json.dumps(value)
+            try:
+                return json.dumps(value)
+            except TypeError:
+                return None
         
 ##################################################################################################
         
-    def query(self, key:str, data_type: str) -> str | None:
+    def query(self, key:str, query_data_type: object):
         """Queries the bndb for the data that is paired with the key.
         
         Args:
-            key (str): The key of the data in the bndb
-            data_type (str): The data type expected from the key
+            key (str): The key of the data in the bndb.
+            data_type (object): The data type expected from the key.
 
         Raises:
             TypeError: If the type of the data queried does not match what is expected then it will raise an error.
 
         Returns:
-            str | None: This function will return the data saved on the bndb. If the key does not exist then it will return None.
+            Any | None: This function will return the data saved on the bndb. If the key does not exist then it will return None.
         """
         
-        data = self.__query(key)
-        decompressed_data = self.__decode(data, data_type)
+        data = self.__decode(self.__query(key), query_data_type)
                 
-        if decompressed_data is not None:
-            return decompressed_data
-        elif type(data).__name__ == data_type or data is None:
+        if data is not None:
             return data
         else:
-            raise TypeError(f"Unexpected type in query_str: {data}, {type(data)}")
+            print(f"Unexpected type in query_str: {data}, {type(data)}")
+            return data
         
-    def __decode(self, data, expected_type: str):
+    def __decode(self, json_string, expected_type: object):
         """Decodes the queried json.
 
         Args:
             data (Any): The json to be decoded.
-            expected_type (str): The expected type of the data.
+            expected_type (object): The expected type of the data.
 
         Raises:
             TypeError: Invalid type for expected type for decompression.
@@ -93,27 +103,46 @@ class bangr_bndb:
         Returns:
             Any | None: Returns the expected type or None.
         """
-
-        if type(data) == dict:
-            if "type" in data.keys():
-                if data["type"] == expected_type:
-                    return json.loads(zlib.decompress(base64.b64decode(data["b64"])))
+        try:
+            json_data = json.loads(json_string)
+        except (KeyError, TypeError):
+            return None
+        if isinstance(json_data, dict):
+            if "bangr_type" in json_data.keys():
+                if json_data["bangr_type"] == expected_type.__name__:
+                    if "b64" in json_data.keys():
+                        return json.loads(zlib.decompress(base64.b85decode(json_data["b64"])))
+                    else: 
+                        return None
                 else:
-                    raise TypeError(f"Invalid query function for key.\nExpected Type: {expected_type}, data: {data}")
+                    print(f"Invalid query function for key.\nExpected Type: {expected_type}, data: {json_data}")
+                    return None
             else:
-                if expected_type == "dict":
-                    return data
+                if expected_type == dict:
+                    return json_data
                 else:
-                    raise TypeError(f"Invalid dictionary for decompression: {data}")
-        return None
+                    print(f"Invalid dictionary for decompression: {json_data}")
+                    return None
+        elif isinstance(json_data, expected_type):
+            return json_data
+        else:
+            return None
         
     
     def __query(self, key: str) -> str | None:
+        """Queries bndb for metadata.
+
+        Args:
+            key (str): The key to query from the bndb.
+
+        Returns:
+            str | None: Returns metadata string or None if metadata is not found.
+        """
         try:
-            meta: Metadata = self.__bv.query_metadata(key)
+            metadata: str = self.__bv.query_metadata(key)
         except KeyError:
             return None
-        return json.loads(meta)
+        return metadata
     
 ##################################################################################################
 
@@ -121,13 +150,6 @@ class bangr_bndb:
         """Removes metadata from the bndb.
 
         Args:
-            key (str): _description_
+            key (str): The key for the metadata to remove.
         """
         self.__bv.remove_metadata(key)
-        
-        
-if __name__ == "main":
-        
-    bndb = bangr_bndb(BinaryView())
-    bndb.store("test", {"fell":"ow"}, True)
-    print(bndb.query("test", "dict"))
