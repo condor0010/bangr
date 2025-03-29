@@ -1,5 +1,4 @@
-
-import json, zlib, base64
+import json, zlib, base64, atexit
 from binaryninja import BinaryView
 
 class BangrBndb:
@@ -13,7 +12,16 @@ class BangrBndb:
         Args:
             bangr_bv (BinaryView): The current BinaryView.
         """
+        
         self.__bv: BinaryView = bangr_bv
+        
+        self.key_list = ["bangr_key_list"]
+        temp = self.query("bangr_key_list", list)
+        if temp is list:
+            self.key_list = temp
+
+        atexit.register(self.store_key_list)
+        return
         
     def store(self, key: str, value, compress: bool | None = None) -> int | None:
         """Stores a python data structure supported by the json module to the bndb.
@@ -31,6 +39,7 @@ class BangrBndb:
 
         if md is not None:
             self.__bv.store_metadata(key, md)
+            self.key_list.append(key)
             # print(md)
             return len(md)
         else:
@@ -65,7 +74,7 @@ class BangrBndb:
             except TypeError:
                 return None
         
-##################################################################################################
+    ##############################################################################################
         
     def query(self, key:str, query_data_type: object):
         """Queries the bndb for the data that is paired with the key.
@@ -74,20 +83,13 @@ class BangrBndb:
             key (str): The key of the data in the bndb.
             data_type (object): The data type expected from the key.
 
-        Raises:
-            TypeError: If the type of the data queried does not match what is expected then it will raise an error.
-
         Returns:
             Any | None: This function will return the data saved on the bndb. If the key does not exist then it will return None.
         """
         
         data = self.__decode(self.__query(key), query_data_type)
                 
-        if data is not None:
-            return data
-        else:
-            print(f"Unexpected type in query_str: {data}, {type(data)}")
-            return data
+        return data
         
     def __decode(self, json_string, expected_type: object):
         """Decodes the queried json.
@@ -144,7 +146,7 @@ class BangrBndb:
             return None
         return metadata
     
-##################################################################################################
+    ##############################################################################################
 
     def remove(self, key: str) -> None:
         """Removes metadata from the bndb.
@@ -152,4 +154,24 @@ class BangrBndb:
         Args:
             key (str): The key for the metadata to remove.
         """
+        
         self.__bv.remove_metadata(key)
+        
+        try:
+            self.key_list.remove(key)
+        except ValueError:
+            pass
+        return
+    
+    def remove_all(self):
+        
+        for key in self.key_list:
+            self.remove(key)
+        self.key_list.clear()
+
+
+    ##############################################################################################
+
+    def store_key_list(self):
+        self.store("bangr_key_list", self.key_list, True)
+        return
