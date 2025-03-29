@@ -1,7 +1,7 @@
 import json, zlib, base64, atexit
 from binaryninja import BinaryView
 
-class BangrBndb:
+class BangrBndb():
     """
     A wrapper to the BinaryNinja bndb API.
     """
