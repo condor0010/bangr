@@ -1,7 +1,10 @@
 import sys
 import binaryninja
 from collections import deque
-import mlil_op_map
+import parser
+from global_vars import *
+from tree import *
+from table import Taint
 
 # 3 types of mlil instructions: one-to-one, inherited, atomic.
 # `one-to-one means` means the operation will propagate the
@@ -13,7 +16,6 @@ import mlil_op_map
 # encompasing operation.
 
 # for debugging:
-unknown_src_ops = {}
 unknown_dest_ops = {}
 unanalyzed_funcs = []
 
@@ -34,36 +36,22 @@ class VarInfo():
 
     def _initialize_tsd(self):
         print(self.var)
-        src = mlil_op_map.lookupSrcs(self.def_inst,0)
+        tree = parser.lookupSrcs(self.def_inst,self.def_inst.size)
         print(f'\tsrcs:')
-        key = src
-        if isinstance(key, str):
-            if key in unknown_src_ops:
-                unknown_src_ops[key].add(self.def_inst.address)
+        if isinstance(tree, str):
+            if tree in parser.unknown_src_ops:
+                parser.unknown_src_ops[tree].add(self.def_inst.address)
             else:
-                unknown_src_ops[key] = {self.def_inst.address}
-            print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {key:32s}')
+                parser.unknown_src_ops[tree] = {self.def_inst.address}
+            print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {tree:32s}')
+        # initialize the symbol table with these trees
+        elif isinstance(tree, list):
+            print(tree)
         else:
-            print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(key)}')
+            sym_tab.set_taint(parser.VarKey(self.var, self.def_inst.size), tree)
+            print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(tree)}')
         #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
-        print(f'\tdests:')
-        for inst in self.use_insts:
-            dests = mlil_op_map.lookupDest(inst)
-            for dest in dests:
-                if isinstance(dest,str):
-                    if dest in unknown_dest_ops:
-                        unknown_dest_ops[dest].add(inst.address)
-                    else:
-                        unknown_dest_ops[dest] = {inst.address}
-                    print(f'\t\tUnnaccounted for type for dest: {type(inst)}')
-                else:
-                    print(f'\t\taddress: {hex(inst.address)}\tvariable: {dest.var}')
-
-def initialize_var_map(ssa_vars):
-    for sv in ssa_vars:
-        sv.def_site
-        sv.use_sites
-
+        
 def analyze_block(block): # return map
     var_ops = []
     for inst in block:
@@ -227,7 +215,7 @@ def walk_graph(first_block, ssa_vars):
 def print_unknown_ops():
     # will print out ops that are unaccounted for
     print('Srcs:')
-    for k, l in unknown_src_ops.items():
+    for k, l in parser.unknown_src_ops.items():
         print(f'\tUnknown Operation: {k}')
         print(f'\t\tOccurrences:')
         for e in l:
@@ -246,22 +234,39 @@ def print_unknown_ops():
 def analyze_function(mlil_ssa_func):
     bbs = mlil_ssa_func.basic_blocks
     ssa_vars = mlil_ssa_func.vars
+    print(ssa_vars)
     #walk_graph(bbs[0], ssa_vars) # assumes index 0 is first block
     for var in ssa_vars:
         if var.def_site:
             VarInfo(var)
+        else: # are naturally version 0 ssa vars
+            if is_tainted_arg(var):
+                print(parser.VarKey(var, var.type.width))
+                sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(0))
+            else:
+                sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(None))
+
+def is_tainted_arg(var):
+    # TODO: actual var names would be given by GUI
+    args = ['arg1', 'arg2', 'arg3', 'arg4']
+    if var.name in args:
+        return True
 
 if len(sys.argv) != 2:
-    print("Usage: python3 analyze.py [path to binary]")
+    print("Usage: python3 {sys.argv[0]} [path to binary]")
     exit()
 
 with binaryninja.load(sys.argv[1]) as bv:
-    mlil_op_map.ADDR_SIZE = bv.address_size 
+    parser.ADDR_SIZE = bv.address_size
     for function in bv.functions:
         mlil_func = function.mlil_if_available
         if mlil_func is None:
             unanalyzed_funcs.append(function.name)
         else:
             print(function.name)
+            if function.name != "func":
+                continue
             analyze_function(mlil_func.ssa_form)
+            print(sym_tab)
+            sym_tab = table.Table()
     print_unknown_ops()

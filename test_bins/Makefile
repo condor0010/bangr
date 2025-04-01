@@ -4,5 +4,6 @@ default:
 	gcc -o compute_address compute_address.c
 	gcc -o struct_test struct_test.c
 	gcc -o negation negation.c
+	gcc -o func_call func_call.c
 clean:
-	rm simple num compute_address struct_test negation
+	rm simple num compute_address struct_test negation func_call

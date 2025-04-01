@@ -1,11 +1,11 @@
 from binaryninja import MediumLevelILOperation
 from binaryninja.mediumlevelil import SSAVariable, MediumLevelILConst, MediumLevelILAdd, MediumLevelILConstPtr, MediumLevelILConstData, MediumLevelILVarSsa, MediumLevelILStoreSsa, MediumLevelILImport, MediumLevelILSub
+from global_vars import *
+from tree import *
 
 # default addr size. should be overwritten once binary
 # view is opened.
 ADDR_SIZE = None
-
-
 
 class MLILOpInfo():
     # Note that nothing is done with `get_important`, it just denotes important
@@ -20,64 +20,7 @@ class MLILOpInfo():
         self.get_dests = get_dests
         self.get_important = get_important
 
-# TODO: Size MUST be specified in initialization
-class VarKey():
-    def __init__(self, var, size, offset=0, offset_sign='+'):
-        self.var = var
-        # could be SSAVariable, MediumLevelILConst, or VarKey
-        #assert isinstance(var, SSAVariable)
-        print(size)
-        self.size = size
-        self.offset = offset
-        self.offset_sign = offset_sign
-        self.var_only = True
-        if self.offset is not None:
-            print(self.size)
-            assert self.size is not None
-            self.var_only = False
-        else:
-            assert self.size is None
-
-    def __repr__(self):
-        return f'VarKey(v={self.var}, s={self.size}, o={self.offset}, os={self.offset_sign})'
-
-    # TODO
-    # table will be at least 2 layers: first is the var it affects,
-    # next is the part of the var it affects
-    def eval(self):
-        return None
-
-# represent an operation that directly transfers taint
-class OneToOne:
-    def __init__(self, src):
-        self.src = src
-
-    def __repr__(self):
-        return f'OneToOne({repr(self.src)})'
-    
-    def eval(self):
-        return self.src.eval()
-
-# represents an operation that will select the highest taint from one or
-# more sources, then decrement it.
-class Inherited:
-    def __init__(self, *srcs):
-        assert len(srcs) > 0
-        self.srcs = srcs
-
-    def __repr__(self):
-        internal = ','.join(list(map(lambda s: repr(s), self.srcs)))
-        return f'Inherited({internal})'
-
-    def eval(self):
-        # reminder that the lower the number the higher the taint
-        max_taint = self.srcs[0].eval()
-        for i in range(1, len(self.srcs)):
-            taint = s.eval()
-            if taint < max_taint:
-                max_taint = taint
-        return max_taint + 1
-
+unknown_src_ops = {}
 def lookupSrcs(mlil, size):
     if isinstance(mlil, SSAVariable):
         return VarKey(mlil, size)
@@ -86,6 +29,10 @@ def lookupSrcs(mlil, size):
     dict_value = op_map.get(mlil.operation, mlil.operation.name)
     # debugging
     if isinstance(dict_value, str) or dict_value is None:
+        if mlil.operation.name in unknown_src_ops:
+            unknown_src_ops[mlil.operation.name].add(mlil.address)
+        else:
+            unknown_src_ops[mlil.operation.name] = {mlil.address}
         return mlil.operation.name
     print(mlil.operation.name)
     # continue recursive lookup
@@ -93,6 +40,7 @@ def lookupSrcs(mlil, size):
 
 # must return VarKey
 # TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
+# TODO: Might have to add ssa_memory_version
 def srcLoadLookup(mlil, size):
     if isinstance(mlil, MediumLevelILVarSsa):
         return VarKey(mlil.src, size, offset=0)
@@ -135,6 +83,7 @@ def lookupDest(mlil):
     return dict_value.get_dests(mlil)
 
 # TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
+# TODO: Might have to add ssa_memory_version
 def destStoreLookup(mlil, size):
     if isinstance(next_mlil, MediumLevelILAdd):
         return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right)]
@@ -165,19 +114,21 @@ op_map = {
             get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
         ),
 # TODO: Account for special case
-    MediumLevelILOperation.MLIL_SET_VAR_ALIASED:
-        MLILOpInfo(
-            'o',
-            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
-        ),
+# prev attr also exists for the dest, but when it's an ssa var it just
+# tells you the previous version of the ssa var
+#    MediumLevelILOperation.MLIL_SET_VAR_ALIASED:
+#        MLILOpInfo(
+#            'o',
+#            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+#            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
+#        ),
 # Prob when something like `var_c#0:0.d # mem#<x> -> mem#<x+1>` is on LHS
-    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
-        MLILOpInfo(
-            'o',
-            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size, offset=mlil.offset)]
-        ),
+#    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
+#        MLILOpInfo(
+#            'o',
+#            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+#            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size, offset=mlil.offset)]
+#        ),
 # the below likely looks like `__return_addr#0:0.d` on LHS
     MediumLevelILOperation.MLIL_SET_VAR_SSA_FIELD:
         MLILOpInfo(
@@ -205,6 +156,9 @@ op_map = {
             lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
         ),
 # dest could just be const or ssa_var, but could also be an MLIL_ADD
+# NOTE: when we parse the destination, the dest_memory operands
+#       will be important because it tells what version the pointer
+#       we're storing to is for future reference
     MediumLevelILOperation.MLIL_STORE_SSA:
         MLILOpInfo(
             'o',
@@ -226,17 +180,17 @@ op_map = {
         ),
     # TODO: This is a special case, whatever this is set equal to will have the same
     #       taint entry as this
-#    MediumLevelILOperation.MLIL_VAR_ALIASED:
-#        MLILOpInfo(
-#            'a',  # technically also oto
-#            lambda mlil: VarKey(mlil.src, size=mlil.size)
-#        ),
-# TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`
-    MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
+    MediumLevelILOperation.MLIL_VAR_ALIASED:
         MLILOpInfo(
-            'a',
-            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
+            'a',  # technically also oto
+            lambda mlil: VarKey(mlil.src, mlil.size)
         ),
+# TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`
+#    MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
+#        MLILOpInfo(
+#            'a',
+#            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
+#        ),
 # TODO: Account for if mlil.src is not an ssa variable
 #       Looks like `__return_addr#0:0.d`) where the second zero is the offset (i think) and the d ofc is the size
 # Could also look like this `2809 @ 001491a3  i_17#2 = i_16#65.r13d` where i_16 is held in r13, but we're only accessing
@@ -246,12 +200,12 @@ op_map = {
             'a',
             lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
         ),
-# find example of VAR_SPLIT being used, likely just an Inherited use case
-#    MediumLevelILOperation.MLIL_VAR_SPLIT_SSA:
-#        MLILOpInfo(
-#            'a',
-#            lambda mlil: Inherited(VarKey(mlil.high, mlil.size), (VarKey(mlil.low, mlil.size)))
-#        ),
+# example: used in x86_64 division and modulus where 2 regs are affected with one op
+    MediumLevelILOperation.MLIL_VAR_SPLIT_SSA:
+        MLILOpInfo(
+            'a',
+            lambda mlil: Inherited(VarKey(mlil.high, mlil.size), (VarKey(mlil.low, mlil.size)))
+        ),
     MediumLevelILOperation.MLIL_VAR_PHI:
         MLILOpInfo(
             'p',
@@ -266,18 +220,19 @@ op_map = {
 #       Also, i dont think they qualify as atomic
 # TODO: ADDRESS_OF operations are special cases where a var could be
 # manipulated via means of this new pointer that's generated
+# NOTE: ADDRESS_OF ops will just be considered as consts for the time being
     MediumLevelILOperation.MLIL_ADDRESS_OF:
         MLILOpInfo(
             'a',
             #TODO src could be of type `binaryninja.variable.Variable`
-            lambda mlil: VarKey(mlil.src, mlil.size) # size technically comes to 0
+            lambda mlil: VarKey(mlil.src, mlil.size, is_deref=True) # size technically comes to 0
         ),
 # TODO: This will be special case where addr of field is gotten, so field could be
-# referenced via means of this new pointer that's generated
+# referenced via means of this new pointer that's generated, find example
     MediumLevelILOperation.MLIL_ADDRESS_OF_FIELD:
         MLILOpInfo(
             'a',
-            lambda mlil: VarKey(mlil.address, mlil.size, mlil.offset)
+            lambda mlil: VarKey(mlil.src, mlil.size, mlil.offset, is_deref=True)
         ),
     MediumLevelILOperation.MLIL_CONST:
         MLILOpInfo(
