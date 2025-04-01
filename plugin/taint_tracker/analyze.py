@@ -247,7 +247,7 @@ def analyze_function(mlil_ssa_func):
                 sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(None))
 
 def is_tainted_arg(var):
-    # TODO: actual var names would be given by GUI
+    # TODO louie: actual var names would be given by GUI
     args = ['arg1', 'arg2', 'arg3', 'arg4']
     if var.name in args:
         return True
@@ -264,8 +264,6 @@ with binaryninja.load(sys.argv[1]) as bv:
             unanalyzed_funcs.append(function.name)
         else:
             print(function.name)
-            if function.name != "func":
-                continue
             analyze_function(mlil_func.ssa_form)
             print(sym_tab)
             sym_tab = table.Table()
