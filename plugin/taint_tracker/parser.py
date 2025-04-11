@@ -39,71 +39,43 @@ def lookupSrcs(mlil, size):
     return dict_value.get_srcs(mlil)
 
 # must return VarKey
-# TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
-# TODO: Might have to add ssa_memory_version
-def srcLoadLookup(mlil, size):
+def srcLoadLookup(mlil, size, mem_version):
     if isinstance(mlil, MediumLevelILVarSsa):
-        return VarKey(mlil.src, size, offset=0)
-    if isinstance(mlil, MediumLevelILConstData):
-        const_data = mlil.const_data
-        return VarKey(const_data.value, size, offset=const_data.offset)
-    if isinstance(mlil, MediumLevelILConst) or isinstance(mlil, MediumLevelILConstPtr) or isinstance(mlil, MediumLevelILImport):
-        return VarKey(mlil, size, offset=0)
+        return VarKey(mlil.src, size, offset=0, is_mem=True, mem_version=mem_version)
+    # TODO: Check if this is necessary, will remove if not
+    #if isinstance(mlil, MediumLevelILConstData):
+    #    const_data = mlil.const_data
+    #    return VarKey(const_data.value, size, offset=const_data.offset)
+    if isinstance(mlil, MediumLevelILConstPtr) or isinstance(mlil, MediumLevelILImport):
+        return VarKey(mlil, size, offset=0, is_mem=True, mem_version=mem_version)
     if isinstance(mlil, MediumLevelILAdd):
-        #op_info = op_map.get(mlil)
-        #srcs = op_info.get_srcs(mlil)
-        return VarKey(mlil.left, size, offset=mlil.right)
+        return interpretDerefOffset(mlil, size, '+', mem_version)
     if isinstance(next_mlil, MediumLevelILSub):
-        return VarKey(next_mlil.left, size, offset=next_mlil.right, offset_sign='-')
+        return interpretDerefOffset(mlil, size, '-', mem_version)
     print(f'Unnaccounted for type at {hex(mlil.address)}: {mlil.operation.name}')
     assert False
 
+def interpretDerefOffset(deref_op, size, sign, mem_version):
+    if isinstance(deref_op.left, MediumLevelILConst):
+        if isinstance(deref_op.right, MediumLevelILVarSsa):
+            return VarKey(deref_op.right, size, offset=deref_op.left, is_mem=True, mem_version=mem_version)
+        elif isinstance(deref_op.right, MediumLevelILConstPtr) or isinstance(deref_op.right, MediumLevelILImport):
+            return VarKey(deref_op.right, size, offset=deref_op.left, is_mem=True, mem_version=mem_version)
+    elif isinstance(deref_op.right, MediumLevelILConst):
+        if isinstance(deref_op.left, MediumLevelILVarSsa):
+            return VarKey(deref_op.left, size, offset=deref_op.right, is_mem=True, mem_version=mem_version)
+        elif isinstance(deref_op.left, MediumLevelILConstPtr) or isinstance(deref_op.left, MediumLevelILImport):
+            return VarKey(deref_op.left, size, offset=deref_op.right, is_mem=True, mem_version=mem_version)
+    # is too complicated, turn into string of tokens for use as taint key
+    token_string = ''.join(list(map(lambda t: str(t), deref_op.tokens)))
+    return VarKey(token_string, size, is_mem=True, mem_version=mem_version)
 
 def lookupDest(mlil):
-    if isinstance(mlil, MediumLevelILStoreSsa):
-        # TODO: this is gross
-        next_mlil = mlil.dest
-        if isinstance(next_mlil, MediumLevelILAdd):
-            return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right)]
-        if isinstance(next_mlil, MediumLevelILSub):
-            return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right, offset_sign='-')]
-        if isinstance(mlil, MediumLevelILConstData):
-            const_data = mlil.const_data
-            return [VarKey(const_data.value, const_data.size, offset=const_data.offset)]
-        if isinstance(next_mlil, MediumLevelILConst) or isinstance(next_mlil, MediumLevelILConstPtr) or isinstance(next_mlil, MediumLevelILImport):
-            return [VarKey(next_mlil, next_mlil.size, offset=0)]
-        if isinstance(next_mlil, MediumLevelILVarSsa):
-            return [VarKey(next_mlil.src, next_mlil.size, offset=0)]
-        print(f'Unaccounted for type in StoreSsa Dest at {hex(mlil.address)}: {next_mlil.operation.name}')
-        assert False
     dict_value = op_map.get(mlil.operation, mlil.operation.name)
     if isinstance(dict_value, str) or dict_value is None:
         return [mlil.operation.name]
     print(mlil.operation.name)
     return dict_value.get_dests(mlil)
-
-# TODO: could be more than just one op happening in load, saw bitshift in dest once along with add
-# TODO: Might have to add ssa_memory_version
-def destStoreLookup(mlil, size):
-    if isinstance(next_mlil, MediumLevelILAdd):
-        return [VarKey(next_mlil.left, mlil.size, offset=next_mlil.right)]
-    if isinstance(next_mlil, MediumLevelILSub):
-        return [VarKey(next_mlil.left, mlil.size,offset=next_mlil.right, offset_sign='-')]
-    if isinstance(mlil, MediumLevelILConstData):
-        const_data = mlil.const_data
-        return [VarKey(const_data.value, const_data.size, offset=const_data.offset)]
-    if isinstance(next_mlil, MediumLevelILConst) or isinstance(next_mlil, MediumLevelILConstPtr) or isinstance(next_mlil, MediumLevelILImport):
-        return [VarKey(next_mlil, next_mlil.size, offset=0)]
-    if isinstance(next_mlil, MediumLevelILVarSsa):
-        return [VarKey(next_mlil.src, next_mlil.size, offset=0)]
-    print(f'Unaccounted for type in StoreSsa Dest at {hex(mlil.address)}: {next_mlil.operation.name}')
-    assert False
-
-# TODO: All of the tuple elements below are special cases I don't know how to account for yet.
-# We need to figure out how to turn them into a SSA vars that we can look up in our taint map.
-# TODO: Constants currently return their associated constant. Need to figure out how to return
-# constant info properly, or at least handle it.
-# TODO: create get_dests for every atomic operation
 
 # lookup: op_map[mlil.operation].get_srcs(mlil.attr)
 op_map = {
@@ -113,29 +85,27 @@ op_map = {
             lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
             get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
         ),
-# TODO: Account for special case
 # prev attr also exists for the dest, but when it's an ssa var it just
 # tells you the previous version of the ssa var
-#    MediumLevelILOperation.MLIL_SET_VAR_ALIASED:
-#        MLILOpInfo(
-#            'o',
-#            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-#            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size)]
-#        ),
+    MediumLevelILOperation.MLIL_SET_VAR_ALIASED:
+        MLILOpInfo(
+            'o',
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, is_mem=True, mem_version=mlil.dest.version)]
+        ),
 # Prob when something like `var_c#0:0.d # mem#<x> -> mem#<x+1>` is on LHS
-#    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
-#        MLILOpInfo(
-#            'o',
-#            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-#            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size, offset=mlil.offset)]
-#        ),
+    MediumLevelILOperation.MLIL_SET_VAR_ALIASED_FIELD:
+        MLILOpInfo(
+            'o',
+            lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
+            get_dests=lambda mlil: [VarKey(mlil.src, mlil.size, offset=mlil.offset, is_mem=True, mem_version=mlil.dest.version)]
+        ),
 # the below likely looks like `__return_addr#0:0.d` on LHS
     MediumLevelILOperation.MLIL_SET_VAR_SSA_FIELD:
         MLILOpInfo(
             'o',
             lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-            # could there be situation where dest is not an ssa var?
-            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, offset=mlil.offset)]
+            get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, offset=mlil.offset, is_mem=True, mem_version=mlil.dest.version)]
         ),
     MediumLevelILOperation.MLIL_SET_VAR_SPLIT_SSA:
         MLILOpInfo(
@@ -148,13 +118,14 @@ op_map = {
         MLILOpInfo(
             'a',
             # can be const, ssa var, or either with an offset via MLIL_ADD
-            lambda mlil: srcLoadLookup(mlil.src, mlil.size)
+            lambda mlil: srcLoadLookup(mlil.src, mlil.size, mlil.src_memory)
         ),
-    MediumLevelILOperation.MLIL_LOAD_STRUCT_SSA:
-        MLILOpInfo(
-            'a',
-            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
-        ),
+# TODO: might have to set the memory stuff here too
+#    MediumLevelILOperation.MLIL_LOAD_STRUCT_SSA:
+#        MLILOpInfo(
+#            'a',
+#            lambda mlil: VarKey(mlil.src, mlil.size, offset=mlil.offset)
+#        ),
 # dest could just be const or ssa_var, but could also be an MLIL_ADD
 # NOTE: when we parse the destination, the dest_memory operands
 #       will be important because it tells what version the pointer
@@ -163,14 +134,14 @@ op_map = {
         MLILOpInfo(
             'o',
             lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
-            get_dests=lambda mlil: srcLoadLookup(mlil.dest, mlil.size)
+            get_dests=lambda mlil: [srcLoadLookup(mlil.dest, mlil.size, mlil.dest_memory)]
         ),
     MediumLevelILOperation.MLIL_STORE_STRUCT_SSA:
         MLILOpInfo(
             'o',
             lambda mlil: OneToOne(lookupSrcs(mlil.src, mlil.size)),
             get_dests=lambda mlil: [VarKey(mlil.dest, mlil.size, offset=mlil.offset)]
-            #get_dests=lambda mlil: srcLoadLookup(mlil.mlil, mlil.size)
+            #get_dests=lambda mlil: [srcLoadLookup(mlil.mlil, mlil.size)]
         ),
     MediumLevelILOperation.MLIL_VAR_SSA:
         MLILOpInfo(
@@ -185,7 +156,8 @@ op_map = {
             'a',  # technically also oto
             lambda mlil: VarKey(mlil.src, mlil.size)
         ),
-# TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`
+# TODO: Verify, prob looks something like `var_c#0:0.d @ mem<x> -> mem<x+1>`, might have to set
+# `is_mem` and `mem_version` fields
 #    MediumLevelILOperation.MLIL_VAR_ALIASED_FIELD:
 #        MLILOpInfo(
 #            'a',

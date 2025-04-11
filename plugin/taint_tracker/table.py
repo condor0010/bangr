@@ -54,29 +54,59 @@ class Taint():
     def __repr__(self):
         return str(self.taint)
 
+# TODO: add cache functionality so that evaluated taint trees
+#       can be saved, won't be valid for symbol table as cached
+#       value should be state specific
 class Table():
-    def __init__(self):
+    def __init__(self, is_mem_table=False):
         self.table = {}
+        self.is_mem_table = is_mem_table
+        if not self.is_mem_table:
+            self.mem_tables = {}
 
     def get_taint(self, vkey):
         # check if entry for var exists
         # if exists, get entry and call get_taint on it
         # if not exists, return -1 or None for no taint at all
-        if vkey.var in self.table:
+        if vkey.is_mem and not self.is_mem_table:
+            return self._get_mem_taint(vkey) 
+        elif vkey.var in self.table:
             return self.table[vkey.var].get_taint(vkey)
         else:
             return Taint(None)
+    
+    # TODO: Implement
+    def _get_mem_taint(self, vkey):
+        if vkey.mem_version in self.mem_tables:
+            mem_table = self.mem_tables[vkey.mem_version]
+            return mem_table.get_taint(vkey)
+        return Taint(None)
 
     def set_taint(self, vkey, taint):
         # check if entry for var exists
         # if exists, get entry and call set_taint on it
         # if not exists, create new entry and save it to the table
-        if vkey.var in self.table:
+        print("BEFORE")
+        print(vkey)
+        print(f'vkey.is_mem={vkey.is_mem}')
+        if vkey.is_mem and not self.is_mem_table:
+            print("AFTER")
+            self._set_mem_taint(vkey, taint)
+        elif vkey.var in self.table:
             self.table[vkey.var].set_taint(vkey, taint)
         else:
             print(f"SETTING TAINT FOR {vkey.var}")
-            self.table[vkey.var] = self.Entry(vkey.size, vkey.offset, vkey.offset_sign, taint)
-            print(self.table)
+            self.table[vkey.var] = self.Entry(vkey.size, vkey.offset, vkey.offset_sign, vkey.is_deref, taint)
+            #print(self.table)
+    
+    # TODO: implement
+    def _set_mem_taint(self, vkey, taint):
+        if vkey.mem_version in self.mem_tables:
+            mem_table = self.mem_tables[vkey.mem_version]
+        else:
+            mem_table = Table(is_mem_table=True)
+            mem_table.set_taint(vkey, taint)
+            self.mem_tables[vkey.mem_version] = mem_table
     
     def __repr__(self):
         string = "Table (\n"
@@ -84,15 +114,25 @@ class Table():
             string += f"\t{k}\n"
             string += f"\t\t{repr(v)}"
         string += ")\n"
+        if self.is_mem_table:
+            return string
+        for k,v in self.mem_tables.items():
+            string += f'Mem#{k} {repr(v)}'
         return string
 
     class Entry():
-        def __init__(self, size, offset, sign, taint):
-            self.ranges = [[size, offset, sign, taint]]
+        def __init__(self, size, offset, sign, is_deref, taint):
+            if is_deref:
+                self.ranges = []
+                self.deref_ranges = [[size, offset, sign, taint]]
+            else:
+                self.deref_ranges = []
+                self.ranges = [[size, offset, sign, taint]]
 
         # TODO: doesnt work for all use cases, what if taint objects are modified in overlaps?
         def get_taint(self, vkey):
             # TODO: account for overlap with and without exact match, could affect taint
+            # TODO: Account for if is deref
             for r in self.ranges:
                 if r[0] == vkey.size and r[1] == vkey.offset and r[2] == vkey.offset_sign:
                     #if not int must be tree
@@ -104,6 +144,7 @@ class Table():
 
         def set_taint(self, vkey, taint):
             # check if it exists, set if it does, or create new and set if it doesnt
+            # TODO: account for if is deref
             for r in self.ranges:
                 if r[0] == vkey.size and r[1] == vkey.offset and r[2] == vkey.offset_sign:
                     r[3] = taint
@@ -111,7 +152,8 @@ class Table():
             self.ranges.append([self.size, self.offset, self.sign, taint])
             return False
 
-        def check_overlap(self):
+        # TODO
+        def _check_overlap(self):
             return Taint(None)
 
         def __repr__(self):

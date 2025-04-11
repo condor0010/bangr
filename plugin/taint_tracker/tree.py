@@ -2,15 +2,17 @@ from binaryninja.mediumlevelil import SSAVariable
 from global_vars import sym_tab
 # TODO: Size MUST be specified in initialization
 class VarKey():
-    def __init__(self, var, size, offset=0, offset_sign='+', is_deref=False):
+    def __init__(self, var, size, offset=0, offset_sign='+', is_deref=False, is_mem=False, mem_version=None):
         self.var = var
-        # could be SSAVariable, some sort of constant, or 
         #assert isinstance(var, SSAVariable)
         self.size = size
         self.offset = offset
         self.offset_sign = offset_sign
         self.var_only = True
         self.is_deref = is_deref
+        self.is_mem = is_mem
+        assert mem_version is not None if is_mem else True
+        self.mem_version = mem_version
         if self.offset is not None:
             assert self.size is not None
             self.var_only = False
@@ -18,7 +20,7 @@ class VarKey():
             assert self.size is None
 
     def __repr__(self):
-        return f'VarKey(v={self.var}, s={self.size}, o={self.offset}, os={self.offset_sign}, id={self.is_deref})'
+        return f'VarKey(v={self.var}, s={self.size}, o={self.offset}, os={self.offset_sign}, id={self.is_deref}, im={self.is_mem}, mv={self.mem_version})'
 
     # TODO
     # table will be at least 2 layers: first is the var it affects,

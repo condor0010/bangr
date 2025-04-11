@@ -4,7 +4,7 @@ from collections import deque
 import parser
 from global_vars import *
 from tree import *
-from table import Taint
+from table import *
 
 # 3 types of mlil instructions: one-to-one, inherited, atomic.
 # `one-to-one means` means the operation will propagate the
@@ -35,7 +35,7 @@ class VarInfo():
         self._initialize_tsd()
 
     def _initialize_tsd(self):
-        print(self.var)
+        #print(self.var)
         tree = parser.lookupSrcs(self.def_inst,self.def_inst.size)
         print(f'\tsrcs:')
         if isinstance(tree, str):
@@ -51,165 +51,83 @@ class VarInfo():
             sym_tab.set_taint(parser.VarKey(self.var, self.def_inst.size), tree)
             print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(tree)}')
         #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
-        
-def analyze_block(block): # return map
-    var_ops = []
-    for inst in block:
-        var_ops.append(inst)
-        #print(inst.operation)
-        if inst.operation == 'MLIL_SET_VAR':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR_ALIASED':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR_ALIASED':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR_ALIASED_FIELD':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR_FIELD':
-            continue
-        elif inst.operation == 'MLIL_SET_VAR_SPLIT':
-            continue
-        elif inst.operation == 'MLIL_LOAD':
-            continue
-        elif inst.operation == 'MLIL_LOAD_STRUCT':
-            continue
-        elif inst.operation == 'MLIL_STORE':
-            continue
-        elif inst.operation == 'MLIL_STORE_STRUCT':
-            continue
-        elif inst.operation == 'MLIL_VAR':
-            continue
-        elif inst.operation == 'MLIL_VAR_ALIASED':
-            continue
-        elif inst.operation == 'MLIL_VAR_ALIASED_FIELD':
-            continue
-        elif inst.operation == 'MLIL_VAR_FIELD':
-            continue
-        elif inst.operation == 'MLIL_VAR_SPLIT':
-            continue
-        elif inst.operation == 'MLIL_VAR_PHI':
-            continue
-        elif inst.operation == 'MLIL_MEM_PHI':
-            continue
-        elif inst.operation == 'MLIL_ADDRESS_OF':
-            continue
-        elif inst.operation == 'MLIL_ADDRESS_OF_FIELD':
-            continue
-        elif inst.operation == 'MLIL_CONST':
-            continue
-        elif inst.operation == 'MLIL_CONST_DATA':
-            continue
-        elif inst.operation == 'MLIL_CONST_PTR':
-            continue
-        elif inst.operation == 'MLIL_EXTERN_PTR':
-            continue
-        elif inst.operation == 'MLIL_FLOAT_CONST':
-            continue
-        elif inst.operation == 'MLIL_IMPORT':
-            continue
-        elif inst.operation == 'MLIL_LOW_PART':
-            continue
-        elif inst.operation == 'MLIL_ADD':
-            continue
-        elif inst.operation == 'MLIL_ADC':
-            continue
-        elif inst.operation == 'MLIL_SUB':
-            continue
-        elif inst.operation == 'MLIL_SBB':
-            continue
-        elif inst.operation == 'MLIL_AND':
-            continue
-        elif inst.operation == 'MLIL_OR':
-            continue
-        elif inst.operation == 'MLIL_XOR':
-            continue
-        elif inst.operation == 'MLIL_LSL':
-            continue
-        elif inst.operation == 'MLIL_LSR':
-            continue
-        elif inst.operation == 'MLIL_ASR':
-            continue
-        elif inst.operation == 'MLIL_ROL':
-            continue
-        elif inst.operation == 'MLIL_RLC':
-            continue
-        elif inst.operation == 'MLIL_ROR':
-            continue
-        elif inst.operation == 'MLIL_RRC':
-            continue
-        elif inst.operation == 'MLIL_MUL':
-            continue
-        elif inst.operation == 'MLIL_MULU_DP':
-            continue
-        elif inst.operation == 'MLIL_MULS_DP':
-            continue
-        elif inst.operation == 'MLIL_DIVU':
-            continue
-        elif inst.operation == 'MLIL_DIVU_DP':
-            continue
-        elif inst.operation == 'MLIL_DIVS':
-            continue
-        elif inst.operation == 'MLIL_DIVS_DP':
-            continue
-        elif inst.operation == 'MLIL_MODU':
-            continue
-        elif inst.operation == 'MLIL_MODU_DP':
-            continue
-        elif inst.operation == 'MLIL_MODS':
-            continue
-        elif inst.operation == 'MLIL_MODS_DP':
-            continue
-        elif inst.operation == 'MLIL_NEG':
-            continue
-        elif inst.operation == 'MLIL_NOT':
-            continue
-        elif inst.operation == 'MLIL_FADD':
-            continue
-        elif inst.operation == 'MLIL_FSUB':
-            continue
-        elif inst.operation == 'MLIL_FMUL':
-            continue
-        elif inst.operation == 'MLIL_FDIV':
-            continue
-        elif inst.operation == 'MLIL_FSQRT':
-            continue
-        elif inst.operation == 'MLIL_FNEG':
-            continue
-        elif inst.operation == 'MLIL_FABS':
-            continue
-        elif inst.operation == 'MLIL_FLOAT_TO_INT':
-            continue
-        elif inst.operation == 'MLIL_INT_TO_FLOAT':
-            continue
-        elif inst.operation == 'MLIL_FLOAT_CONV':
-            continue
-        elif inst.operation == 'MLIL_ROUND_TO_INT':
-            continue
-        elif inst.operation == 'MLIL_FLOOR':
-            continue
-        elif inst.operation == 'MLIL_CEIL':
-            continue
-        elif inst.operation == 'MLIL_FTRUNC':
-            continue
-        elif inst.operation == 'MLIL_SX':
-            continue
-        elif inst.operation == 'MLIL_ZX':
-            continue
-        elif inst.operation == 'MLIL_ADD_OVERFLOW':
-            continue
-        elif inst.operation == 'MLIL_BOOL_TO_INT':
-            continue
 
-def walk_graph(first_block, ssa_vars):
+# TODO: We have to locate all phi's in the function and their associated
+# potential values. The latest seen value will be the value that is assigned
+# in the phi.
+def get_phis():
+    return None
+
+def analyze_block(block, state_taint_table): # return map
+    for inst in block:
+        if isinstance(inst, binaryninja.mediumlevelil.MediumLevelILVarPhi):
+            # TODO: get latest phi from potential sources
+            continue
+        # TODO: Check if dest exists in symbol table, else save to state specific symbol table
+        src_tree = parser.lookupSrcs(inst,inst.size)
+        dests = parser.lookupDest(inst)
+        # TODO: dest could be list, which means multiple dests or phi
+        print(dests)
+        #print(f'\tsrcs:')
+        if isinstance(src_tree, str):
+            if src_tree in parser.unknown_src_ops:
+                parser.unknown_src_ops[src_tree].add(inst.address)
+            else:
+                parser.unknown_src_ops[src_tree] = {inst.address}
+            #print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {src_tree:32s}')
+        # initialize the taint table with these src_trees
+        elif isinstance(src_tree, list):
+            # TODO: this signifies a phi, need to account for this
+            #print(src_tree)
+            continue
+        else:
+            for dest in dests:
+                state_taint_table.set_taint(dest, src_tree)
+            #print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(src_tree)}')
+
+
+def walk_graph(first_block, path, state_taint_table):
+    print("Walking graph")
     seen_blocks = {first_block}
     next_blocks = deque()
     next_blocks.append(first_block)
+    print(f'length: {len(next_blocks)}')
     while len(next_blocks) != 0:
         next_block = next_blocks.popleft()
-        analyze_block(next_block)
-        [(next_blocks.append(child),seen_blocks.add(child)) for child in [edge.target for edge in next_block.outgoing_edges] if child not in seen_blocks]
+        print(next_block)
+        analyze_block(next_block, state_taint_table)
+        if len(next_block.outgoing_edges) == 2:
+            # we're assuming true and false are the only possible options when there are 2 outgoing edges
+            assert next_block.outgoing_edges[0].type == binaryninja.BranchType.FalseBranch or next_block.outgoing_edges[0].type == binaryninja.BranchType.TrueBranch
+            assert next_block.outgoing_edges[1].type == binaryninja.BranchType.FalseBranch or next_block.outgoing_edges[0].type == binaryninja.BranchType.TrueBranch
+            true_branch = None
+            false_branch = None
+            if next_block.outgoing_edges[0].type == binaryninja.BranchType.FalseBranch:
+                false_branch = next_block.outgoing_edges[0].target
+                true_branch = next_block.outgoing_edges[1].target
+            else:
+                true_branch = next_block.outgoing_edges[0].target
+                false_branch = next_block.outgoing_edges[1].target
+            # TODO: possible bug, if all bits provided have actually been expended 
+            #       python will just keep provideing 0's, create `Path` object to
+            #       store bits and path length
+            next_branch = path & 1
+            path = path >> 1
+            if next_branch == 0:
+                next_blocks.append(false_branch)
+            else:
+                next_blocks.append(true_branch)
+        elif len(next_block.outgoing_edges) == 1:
+            # As far as i know blocks can only be either true-false or a single unconditional
+            assert len(next_block.outgoing_edges) == 1
+            assert next_block.outgoing_edges[0].type == next_block.outgoing_edges[0].type == binaryninja.BranchType.UnconditionalBranch
+            next_blocks.append(next_block.outgoing_edges[0].target)
+        elif len(next_block.outgoing_edges) == 0:
+            return True
+        else:
+            # unaccounted for, inspect this
+            print(next_block.outgoing_edges)
+            assert False
 
 # for debugging
 def print_unknown_ops():
@@ -230,12 +148,8 @@ def print_unknown_ops():
     for f in unanalyzed_funcs:
         print(f'\t{f}')
 
-
-def analyze_function(mlil_ssa_func):
-    bbs = mlil_ssa_func.basic_blocks
+def gen_symbol_table(mlil_ssa_func):
     ssa_vars = mlil_ssa_func.vars
-    print(ssa_vars)
-    #walk_graph(bbs[0], ssa_vars) # assumes index 0 is first block
     for var in ssa_vars:
         if var.def_site:
             VarInfo(var)
@@ -245,6 +159,18 @@ def analyze_function(mlil_ssa_func):
                 sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(0))
             else:
                 sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(None))
+    # base symbol table is populated at this point
+    # TODO louie: sym_tab as the function specific symbol table instead of being global
+
+# generate the base symbol table and then walk it based on a path
+def analyze_function(mlil_ssa_func, path):
+    # TODO: implement get_phis
+    get_phis()
+    bbs = mlil_ssa_func.basic_blocks
+    # TODO: Check if the stated path has already been analyzed
+    state_taint_table = table.Table()
+    walk_graph(bbs[0], path, state_taint_table)
+    print(state_taint_table)
 
 def is_tainted_arg(var):
     # TODO louie: actual var names would be given by GUI
@@ -252,19 +178,21 @@ def is_tainted_arg(var):
     if var.name in args:
         return True
 
-if len(sys.argv) != 2:
-    print("Usage: python3 {sys.argv[0]} [path to binary]")
-    exit()
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: python3 {sys.argv[0]} [path to binary]")
+        exit()
 
-with binaryninja.load(sys.argv[1]) as bv:
-    parser.ADDR_SIZE = bv.address_size
-    for function in bv.functions:
-        mlil_func = function.mlil_if_available
-        if mlil_func is None:
-            unanalyzed_funcs.append(function.name)
-        else:
-            print(function.name)
-            analyze_function(mlil_func.ssa_form)
-            print(sym_tab)
-            sym_tab = table.Table()
-    print_unknown_ops()
+    with binaryninja.load(sys.argv[1]) as bv:
+        parser.ADDR_SIZE = bv.address_size
+        for function in bv.functions:
+            if function.name != "main":
+                continue
+            mlil_func = function.mlil_if_available
+            if mlil_func is None:
+                unanalyzed_funcs.append(function.name)
+            else:
+                analyze_function(mlil_func.ssa_form, int('1010',2))
+                print(sym_tab)
+                sym_tab = table.Table()
+        print_unknown_ops()
