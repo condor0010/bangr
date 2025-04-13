@@ -1,6 +1,14 @@
 # sidebar_widget.py
-from PySide6.QtWidgets import QVBoxLayout, QTabWidget, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView, QInputDialog
-from binaryninja import BinaryView
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtWidgets import (
+    QVBoxLayout, QTableWidget, QTableWidgetItem,
+    QHeaderView, QTabWidget, QWidget, QLineEdit, QInputDialog
+)
+from binaryninja import BinaryView, PluginCommand, HighlightStandardColor
+from binaryninjaui import SidebarWidget, SidebarWidgetType, SidebarWidgetLocation, SidebarContextSensitivity
+import os
 from .table_widget import VariableTable
 from .tabs import SSAPlaceholderTab
 from .utils import filter_variables
@@ -21,15 +29,29 @@ class VariableListWidget(SidebarWidget):
         
         self.tabWidget = QTabWidget()
         self.variableTable = VariableTable(self.bv, self.current_offset)
+        self.SSAVariableTable = SSAPlaceholderTab(self.bv, self.current_offset)
         self.tabWidget.addTab(self.variableTable, "Variables")
-        self.tabWidget.addTab(SSAPlaceholderTab(), "SSA Variables")
+        self.tabWidget.addTab(self.SSAVariableTable, "SSA Variables")
         layout.addWidget(self.tabWidget)
 
+        # self.SSAVariableTable.itemSelectionChanged.connect(self.highlight_instructions)
+        # self.SSAVariableTable.itemDoubleClicked.connect(self.edit_cell)
         self.variableTable.itemSelectionChanged.connect(self.highlight_instructions)
         self.variableTable.itemDoubleClicked.connect(self.edit_cell)
 
     def _populate_variable_list(self):
         self.variableTable.populate_variables(self.bv, self.current_offset)
+        self.SSAVariableTable.populate_variables(self.bv, self.current_offset)
+        
+    def notifyViewLocationChanged(self, view, location):
+        if location: self.current_offset = location.getOffset()
+        self._populate_variable_list()
+
+    def notifyVariableRenamed(self, var, name):
+        self._populate_variable_list()
+    
+    def function_updated(self, view, func):
+        self._populate_variable_list()
 
     def filter_variables(self):
         filter_variables(self.search_bar, self.variableTable)
@@ -60,4 +82,34 @@ class VariableListWidget(SidebarWidget):
                 if func:
                     func.name = new_name
                     item.setText(new_name)
+                    
+class VariableListWidgetType(SidebarWidgetType):
+    name = "bANGR Panel"
+    
+    def __init__(self):
+        path_icon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "RL.svg")
+        icon = self._render_svg_icon(path_icon)
+        SidebarWidgetType.__init__(self, icon, self.name)
+
+    def _render_svg_icon(self, path_icon):
+        renderer = QSvgRenderer(path_icon)
+        icon = QImage(56, 56, QImage.Format_ARGB32)
+        icon.fill(0xaaA08080)  # Fallback color
+        painter = QPainter(icon)
+        renderer.render(painter)
+        painter.end()
+        return icon
+    
+    def createWidget(self, frame, data):
+        return VariableListWidget(self.name, frame, data)
+
+
+def defaultLocation():
+    return SidebarWidgetLocation.RightSidebar
+
+def contextSensitivity():
+    return SidebarContextSensitivity.SelfManagedSidebarContext
+
+
+PluginCommand.register("Show Variable List", "Displays a list of variables and SSA variables", lambda bv: None)
 

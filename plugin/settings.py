@@ -16,4 +16,14 @@ class BangrSettings():
                 "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
             }
             """)
+        self.__settings.register_setting("bANGR.threadCount", """
+            {
+                "title" : "Thread Count",
+                "type" : "number",
+                "default" : 4,
+                "minValue" : 0,
+                "description" : "The number of threads used by bANGR",
+                "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+            }
+            """)
         

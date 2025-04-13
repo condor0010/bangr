@@ -1,5 +1,6 @@
 # table_widget.py
 from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+from PySide6.QtCore import Qt
 from binaryninja import BinaryView
 
 class VariableTable(QTableWidget):
