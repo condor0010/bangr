@@ -18,6 +18,8 @@ from table import *
 # for debugging:
 unknown_dest_ops = {}
 unanalyzed_funcs = []
+path_traversed = []
+paths = []
 
 # when looking at ssa vars, we need their def site (.def_site), their
 # use sites (.use_site), the blocks they belong to (.il_basic_block),
@@ -52,22 +54,85 @@ class VarInfo():
             print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(tree)}')
         #self.taint_dests = mlil_obj.get_dests(self.def_inst.dest)
 
+
+###
+
+class PhiTable():
+    # TODO: the two dictionaries seems overkill. Less intensive way would be to
+    # Walk the path we took backwards and check if we pass over the address with
+    # the def site for any of the phi vars.
+    # TODO: there has to be a way to integrate this into the standard taint
+    # table
+    def __init__(self):
+        self.table = {}
+        self.var_to_dest = {}
+        self.mems_seen = [0]
+    
+    def add_phi_arr(self,dest,srcs):
+        self.table[dest] = None
+        for s in srcs:
+            self.var_to_dest[s] = dest
+    
+    def add_mem_version(self, mem_version):
+        self.mems_seen.append(mem_version)
+
+    def record_if_phi(self,src):
+        dest = self.var_to_dest.get(src, None)
+        print(f"Record_if_phi: {dest} for {src}")
+        if dest is not None:
+            self.table[dest] = src
+
+    def get_latest_var_source(self, var):
+        return self.table[var]
+
+    def get_latest_mem_source(self, src_list):
+        for i in range(len(self.mems_seen)-1, -1, -1):
+            if self.mems_seen[i] in src_list:
+                return self.mems_seen[i]
+        print(f'no element from {src_list} was found in')
+        print(f'{self.mems_seen}')
+        raise Exception
+
+    def populate_phi_table(phi_table, ssa_vars):
+        for var in ssa_vars:
+            for use_site in var.use_sites:
+                if use_site.operation == binaryninja.MediumLevelILOperation.MLIL_VAR_PHI:
+                    phi_table.add_phi_arr(use_site.dest,use_site.src)
+
+    def __repr__(self):
+        return f'Phi Table: (\n\t{self.table}\n\t{self.var_to_dest}\n)'
+
 # TODO: We have to locate all phi's in the function and their associated
 # potential values. The latest seen value will be the value that is assigned
 # in the phi.
-def get_phis():
-    return None
 
-def analyze_block(block, state_taint_table): # return map
+###
+
+def analyze_block(block, state_taint_table, phi_table): # return map
     for inst in block:
+        print("=================")
+        print(inst)
+        print("=================")
         if isinstance(inst, binaryninja.mediumlevelil.MediumLevelILVarPhi):
-            # TODO: get latest phi from potential sources
+            src = phi_table.get_latest_var_source(inst.dest)
+            #print(src)
+            state_taint_table.copy_var_taint(inst.dest, src)
             continue
+        elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILMemPhi):
+            mem_versions = inst.src_memory
+            src = phi_table.get_latest_mem_source(mem_versions)
+            state_taint_table.copy_mem_taint(inst.dest_memory, src)
+        elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILCallSsa):
+            phi_table.add_mem_version(inst.output_dest_memory)
+        elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILStoreSsa):
+            phi_table.add_mem_version(inst.dest_memory)
+        elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILSetVarAliased):
+            phi_table.add_mem_version(inst.dest.version)
         # TODO: Check if dest exists in symbol table, else save to state specific symbol table
         src_tree = parser.lookupSrcs(inst,inst.size)
         dests = parser.lookupDest(inst)
         # TODO: dest could be list, which means multiple dests or phi
-        print(dests)
+        #print(dests)
         #print(f'\tsrcs:')
         if isinstance(src_tree, str):
             if src_tree in parser.unknown_src_ops:
@@ -75,18 +140,13 @@ def analyze_block(block, state_taint_table): # return map
             else:
                 parser.unknown_src_ops[src_tree] = {inst.address}
             #print(f'\t\taddress: {hex(self.def_inst.address)}\tmlil_op: {src_tree:32s}')
-        # initialize the taint table with these src_trees
-        elif isinstance(src_tree, list):
-            # TODO: this signifies a phi, need to account for this
-            #print(src_tree)
-            continue
         else:
             for dest in dests:
+                phi_table.record_if_phi(dest.var)
                 state_taint_table.set_taint(dest, src_tree)
             #print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(src_tree)}')
 
-
-def walk_graph(first_block, path, state_taint_table):
+def walk_graph(first_block, path, state_taint_table, phi_table):
     print("Walking graph")
     seen_blocks = {first_block}
     next_blocks = deque()
@@ -95,7 +155,8 @@ def walk_graph(first_block, path, state_taint_table):
     while len(next_blocks) != 0:
         next_block = next_blocks.popleft()
         print(next_block)
-        analyze_block(next_block, state_taint_table)
+        path_traversed.append(next_block)
+        analyze_block(next_block, state_taint_table, phi_table)
         if len(next_block.outgoing_edges) == 2:
             # we're assuming true and false are the only possible options when there are 2 outgoing edges
             assert next_block.outgoing_edges[0].type == binaryninja.BranchType.FalseBranch or next_block.outgoing_edges[0].type == binaryninja.BranchType.TrueBranch
@@ -112,6 +173,7 @@ def walk_graph(first_block, path, state_taint_table):
             #       python will just keep provideing 0's, create `Path` object to
             #       store bits and path length
             next_branch = path & 1
+            paths.append(path)
             path = path >> 1
             if next_branch == 0:
                 next_blocks.append(false_branch)
@@ -147,6 +209,9 @@ def print_unknown_ops():
     print('Unanalyzed Funcs:')
     for f in unanalyzed_funcs:
         print(f'\t{f}')
+    print('Path Traversed:')
+    print(path_traversed)
+    [print(bin(path)) for path in paths]
 
 def gen_symbol_table(mlil_ssa_func):
     ssa_vars = mlil_ssa_func.vars
@@ -165,12 +230,17 @@ def gen_symbol_table(mlil_ssa_func):
 # generate the base symbol table and then walk it based on a path
 def analyze_function(mlil_ssa_func, path):
     # TODO: implement get_phis
-    get_phis()
+    phi_table = PhiTable()
+    phi_table.populate_phi_table(mlil_ssa_func.ssa_vars)
+    state_taint_table = table.Table()
+    for var in mlil_ssa_func.ssa_vars:
+        if is_tainted_arg(var):
+            state_taint_table.set_taint(parser.VarKey(var, var.type.width), Taint(0))
     bbs = mlil_ssa_func.basic_blocks
     # TODO: Check if the stated path has already been analyzed
-    state_taint_table = table.Table()
-    walk_graph(bbs[0], path, state_taint_table)
+    walk_graph(bbs[0], path, state_taint_table, phi_table)
     print(state_taint_table)
+    print(phi_table)
 
 def is_tainted_arg(var):
     # TODO louie: actual var names would be given by GUI
@@ -178,6 +248,7 @@ def is_tainted_arg(var):
     if var.name in args:
         return True
 
+ctr = 0
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: python3 {sys.argv[0]} [path to binary]")
@@ -186,13 +257,15 @@ if __name__ == '__main__':
     with binaryninja.load(sys.argv[1]) as bv:
         parser.ADDR_SIZE = bv.address_size
         for function in bv.functions:
-            if function.name != "main":
+            if function.name != "func":
                 continue
+            ctr += 1
             mlil_func = function.mlil_if_available
             if mlil_func is None:
                 unanalyzed_funcs.append(function.name)
             else:
-                analyze_function(mlil_func.ssa_form, int('1010',2))
-                print(sym_tab)
-                sym_tab = table.Table()
+                analyze_function(mlil_func.ssa_form, int('001011',2))
+                #print(sym_tab)
+                #sym_tab = table.Table()
         print_unknown_ops()
+print(ctr)

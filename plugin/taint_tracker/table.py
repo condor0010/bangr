@@ -55,27 +55,30 @@ class Taint():
         return str(self.taint)
 
 # TODO: add cache functionality so that evaluated taint trees
-#       can be saved, won't be valid for symbol table as cached
-#       value should be state specific
+#       can be saved
 class Table():
     def __init__(self, is_mem_table=False):
         self.table = {}
         self.is_mem_table = is_mem_table
         if not self.is_mem_table:
             self.mem_tables = {}
+            # TODO: Must change when we want to give initially tainted memory
+            self.mem_tables[0] = Table(is_mem_table=True)
 
     def get_taint(self, vkey):
         # check if entry for var exists
         # if exists, get entry and call get_taint on it
         # if not exists, return -1 or None for no taint at all
+        print(f'Evaling for {vkey}')
+        print(vkey.var in self.table)
+        print(self.table)
         if vkey.is_mem and not self.is_mem_table:
-            return self._get_mem_taint(vkey) 
+            return self._get_mem_taint(vkey)
         elif vkey.var in self.table:
             return self.table[vkey.var].get_taint(vkey)
         else:
             return Taint(None)
-    
-    # TODO: Implement
+
     def _get_mem_taint(self, vkey):
         if vkey.mem_version in self.mem_tables:
             mem_table = self.mem_tables[vkey.mem_version]
@@ -96,18 +99,27 @@ class Table():
             self.table[vkey.var].set_taint(vkey, taint)
         else:
             print(f"SETTING TAINT FOR {vkey.var}")
-            self.table[vkey.var] = self.Entry(vkey.size, vkey.offset, vkey.offset_sign, vkey.is_deref, taint)
+            print(f'taint: {taint}')
+            self.table[vkey.var] = self.Entry(vkey.size, vkey.offset, vkey.offset_sign, vkey.is_deref, taint, self)
             #print(self.table)
-    
-    # TODO: implement
+
     def _set_mem_taint(self, vkey, taint):
         if vkey.mem_version in self.mem_tables:
             mem_table = self.mem_tables[vkey.mem_version]
+            mem_table.set_taint(vkey, taint)
         else:
             mem_table = Table(is_mem_table=True)
             mem_table.set_taint(vkey, taint)
             self.mem_tables[vkey.mem_version] = mem_table
-    
+
+    def copy_var_taint(self, dest, src):
+        if src in self.table:
+            self.table[dest] = self.table[src]
+
+    def copy_mem_taint(self, dest, src):
+        # Mem table index will now point to the same instance
+        self.mem_tables[dest] = self.mem_tables[src]
+
     def __repr__(self):
         string = "Table (\n"
         for k,v in self.table.items():
@@ -121,7 +133,8 @@ class Table():
         return string
 
     class Entry():
-        def __init__(self, size, offset, sign, is_deref, taint):
+        def __init__(self, size, offset, sign, is_deref, taint, taint_table):
+            self.taint_table = taint_table
             if is_deref:
                 self.ranges = []
                 self.deref_ranges = [[size, offset, sign, taint]]
@@ -139,7 +152,8 @@ class Table():
                     if isinstance(r[3], Taint):
                         return r[3]
                     else:
-                        return r[3].eval()
+                        print(f'Evaling taint for {r[3]}')
+                        return r[3].eval(self.taint_table)
             return Taint(None)
 
         def set_taint(self, vkey, taint):
@@ -158,10 +172,17 @@ class Table():
 
         def __repr__(self):
             string = ''
+            string += "Normal ranges:\n"
             for r in self.ranges:
                 if isinstance(r[3], Taint):
-                    string += f"Taint: {repr(r[3])}\n"
+                    string += f"\t\t\tTaint: {repr(r[3])}\n"
                 else:
-                    string += f"Taint: {repr(r[3].eval())}\n"
+                    string += f"\t\t\tTaint: {repr(r[3])} = {repr(r[3].eval(self.taint_table))}\n"
+            string += "\t\tDeref ranges:\n"
+            for r in self.deref_ranges:
+                if isinstance(r[3], Taint):
+                    string += f"\t\t\tTaint: {repr(r[3])}\n"
+                else:
+                    string += f"\t\t\tTaint: {repr(r[3].eval(self.taint_table))}\n"
             string += '\n'
             return string
