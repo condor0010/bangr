@@ -26,4 +26,14 @@ class BangrSettings():
                 "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
             }
             """)
+        self.__settings.register_setting("bANGR.LRUCache", """
+            {
+                "title" : "Max Memoization",
+                "type" : "number",
+                "default" : 0,
+                "minValue" : 0,
+                "description" : "The number of LRUCache items kept by bANGR",
+                "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+            }
+            """)
         
