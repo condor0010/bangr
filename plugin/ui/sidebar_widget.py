@@ -115,7 +115,6 @@ class VariableListWidget(SidebarWidget):
     def _populate_variable_list(self):
         self.VarTab.populate_variables(self.current_offset)
         self.SSAVarTab.populate_variables(self.current_offset)
-        self.CFPTab.updateContext(self.current_offset)
         
     def notifyViewLocationChanged(self, view, location):
         if location: self.current_offset = location.getOffset()

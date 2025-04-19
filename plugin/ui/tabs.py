@@ -1,9 +1,8 @@
-from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QSizePolicy
+from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QWidget, QVBoxLayout, QScrollArea, QComboBox, QPushButton
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtCore import Qt
-from binaryninja import BinaryView
-from ..taint_tracker.path_gen import CFGPathExtractor
-from binaryninja import BinaryView
+from binaryninja import BinaryView, HighlightColor
+from binaryninja.enums import HighlightStandardColor
 
 class SSAVarTab(QTableWidget):
     """The SSA Variable Tab for the bANGR plugin.
@@ -131,7 +130,7 @@ class VarTab(QTableWidget):
     def _get_variable_location(var):
         return str(var.storage) if var.storage else "Unknown"
     
-class CFPTab(QComboBox):
+class CFPTab(QWidget):
     """The SSA Variable Tab for the bANGR plugin.
 
     Args:
@@ -140,34 +139,30 @@ class CFPTab(QComboBox):
 
     def __init__(self, bv:BinaryView, current_offset:int):
         super().__init__()
-        text="Select an option..."
 
         self.bv = bv
         self.current_offset = current_offset
-        self.setPlaceholderText(text)
+        self.bList = []
+        self.dropdowns = []
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        scroll.setWidget(content)
+        self.content_layout = QVBoxLayout(content)
+        
+        self.content_layout.addStretch()
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(scroll)
+        self._add_dropdown()
 
-        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setSizePolicy(size_policy)
-        self.setMinimumWidth(0)
-        self.setMaximumHeight(50)
+    def _add_dropdown(self, items:list):
+        combo = QComboBox()
+        combo.addItems(items)
 
-        self.currentIndexChanged.connect(self._on_selection_changed)
+        combo.currentIndexChanged.connect(lambda idx, c=combo: self.on_dropdown_changed(c, idx))
+        self.content_layout.addWidget(combo)
+        self.bList.append(combo)
 
-    def updateContext(self, current_offset:int):
-        func = next(iter(self.bv.get_functions_containing(current_offset)), None)
-        if func is None: return
-        pathgen = CFGPathExtractor(func)
-        pathgen.get_paths()
-        path_ints = pathgen.get_path_ints()
-        path_strs = [str(path) for path in path_ints]
-        self.clear()
-        self.addItems(path_strs)
-
-
-
-    def _on_selection_changed(self, index):
-
-        print(f"[BNComboBox] Selected: {self.itemText(index)}")
-
-    def get_selected_value(self):
-        return self.currentText()
+    def _on_dropdown_changed(self, combo, index):
+        if self.dropdowns.index(combo) < len(self.bList) - 1:
+            pass
