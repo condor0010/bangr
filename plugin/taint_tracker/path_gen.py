@@ -48,6 +48,6 @@ if __name__ == "__main__":
             path_ints = extractor.get_path_ints()
 
             for path, path_int in zip(paths, path_ints):
-                print(f"[MILO]: {func.start:#08x} | {path_int} | {path_int:#08b}")
+                print(f"[MILO]: {func.name} | {path_int} | {path_int:#08b}")
                 print("\n".join(f"  {addr:#08x} {decision}" for addr, decision in path), "\n")
 

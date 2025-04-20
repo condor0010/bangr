@@ -25,6 +25,7 @@ class VarKey():
         return f'VarKey(v={self.var}, s={self.size}, o={self.offset}, os={self.offset_sign}, id={self.is_deref}, im={self.is_mem}, mv={self.mem_version})'
 
     def eval(self, taint_table):
+        print(f"Evaling {self}")
         return taint_table.get_taint(self)
 
 # represent an operation that directly transfers taint
@@ -36,6 +37,7 @@ class OneToOne:
         return f'OneToOne({repr(self.src)})'
 
     def eval(self, taint_table):
+        print(f"Evaling {self}")
         return self.src.eval(taint_table)
 
 # represents an operation that will select the highest taint from one or
@@ -50,8 +52,13 @@ class Inherited:
         return f'Inherited({internal})'
 
     def eval(self, taint_table):
+        print(f"Evaling {self.srcs[0]}")
         max_taint = self.srcs[0].eval(taint_table)
+        print(self.srcs)
+        print(max_taint)
+        print(range(1, len(self.srcs)))
         for i in range(1, len(self.srcs)):
+            print(f"Evaling {self.srcs[i]}")
             taint = self.srcs[i].eval(taint_table)
             if taint > max_taint:
                 max_taint = taint

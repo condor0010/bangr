@@ -67,7 +67,7 @@ class PhiTable():
         self.table = {}
         self.var_to_dest = {}
         self.mems_seen = [0]
-    
+
     def add_phi_arr(self,dest,srcs):
         self.table[dest] = None
         for s in srcs:
@@ -113,10 +113,15 @@ def analyze_block(block, state_taint_table, phi_table): # return map
         print("=================")
         print(inst)
         print("=================")
+        print(state_taint_table)
         if isinstance(inst, binaryninja.mediumlevelil.MediumLevelILVarPhi):
             src = phi_table.get_latest_var_source(inst.dest)
-            #print(src)
-            state_taint_table.copy_var_taint(inst.dest, src)
+            # we have evaluate the taint now to prevent losing previous versions
+            # of phi
+            #state_taint_table.cache()
+            # overwrite the taint with new taint
+            #state_taint_table.set_taint(inst.dest, state_taint_table.get_taint(src))
+            state_taint_table.copy_var_taint_for_phi(inst.dest, src)
             continue
         elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILMemPhi):
             mem_versions = inst.src_memory
@@ -124,6 +129,7 @@ def analyze_block(block, state_taint_table, phi_table): # return map
             state_taint_table.copy_mem_taint(inst.dest_memory, src)
         elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILCallSsa):
             phi_table.add_mem_version(inst.output_dest_memory)
+            state_taint_table.copy_mem_taint(inst.output_dest_memory, inst.ssa_memory_version)
         elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILStoreSsa):
             phi_table.add_mem_version(inst.dest_memory)
         elif isinstance(inst, binaryninja.mediumlevelil.MediumLevelILSetVarAliased):
@@ -250,21 +256,23 @@ def is_tainted_arg(var):
 
 ctr = 0
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 4:
         print("Usage: python3 {sys.argv[0]} [path to binary]")
         exit()
 
     with binaryninja.load(sys.argv[1]) as bv:
+        bv.update_analysis_and_wait()
         parser.ADDR_SIZE = bv.address_size
         for function in bv.functions:
-            if function.name != "func":
+            if function.name != sys.argv[2]:
                 continue
+            print(f'skipped: {function.analysis_skipped}')
             ctr += 1
             mlil_func = function.mlil_if_available
             if mlil_func is None:
                 unanalyzed_funcs.append(function.name)
             else:
-                analyze_function(mlil_func.ssa_form, int('001011',2))
+                analyze_function(mlil_func.ssa_form, int(sys.argv[3],2))
                 #print(sym_tab)
                 #sym_tab = table.Table()
         print_unknown_ops()
