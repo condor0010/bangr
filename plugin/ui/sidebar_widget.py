@@ -10,7 +10,7 @@ from binaryninja import BinaryView, PluginCommand, HighlightStandardColor
 from binaryninjaui import SidebarWidget, SidebarWidgetType, SidebarWidgetLocation, SidebarContextSensitivity
 import os
 from functools import partial
-from .tabs import SSAVarTab, VarTab, CFPTab
+from .tabs import OldCFPTab, SSAVarTab, VarTab, CFPTab
 
 class VariableListWidget(SidebarWidget):
     def __init__(self, name, frame, bv: BinaryView):
@@ -34,11 +34,13 @@ class VariableListWidget(SidebarWidget):
         self.VarTab = VarTab(self.bv)
         self.SSAVarTab = SSAVarTab(self.bv)
         self.CFPTab = CFPTab(self.bv)
+        self.oldCFPTab = OldCFPTab(self.bv)
 
         for tab, name in [
             (self.VarTab, "Variables"),
             (self.SSAVarTab, "SSA Variables"),
-            (self.CFPTab, "Control Flow Path")
+            (self.CFPTab, "Control Flow Path"),
+            (self.oldCFPTab, "Old CFP")
         ]: self.tabWidget.addTab(tab, name)
 
         layout.addWidget(self.tabWidget)
@@ -115,6 +117,7 @@ class VariableListWidget(SidebarWidget):
     def _populate_variable_list(self):
         self.VarTab.populate_variables(self.current_offset)
         self.SSAVarTab.populate_variables(self.current_offset)
+        self.oldCFPTab.updateContext(self.current_offset)
         self.CFPTab.update_CFP(self.current_offset)
         
     def notifyViewLocationChanged(self, view, location):
