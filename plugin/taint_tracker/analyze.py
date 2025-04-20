@@ -257,7 +257,9 @@ def is_tainted_arg(var):
 
 ctr = 0
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
+    from path_gen import CFGPathExtractor
+    from time import sleep
+    if len(sys.argv) != 3:
         print("Usage: python3 {sys.argv[0]} [path to binary]")
         exit()
 
@@ -270,13 +272,22 @@ if __name__ == '__main__':
         for function in bv.functions:
             if function.name != sys.argv[2]:
                 continue
+
+            # s
+            sleep(10)
+            extractor = CFGPathExtractor(function)
+            paths = extractor.get_paths()
+            path_ints = extractor.get_path_ints()
+            # e
+
             print(f'skipped: {function.analysis_skipped}')
             ctr += 1
             mlil_func = function.mlil_if_available
             if mlil_func is None:
                 unanalyzed_funcs.append(function.name)
             else:
-                analyze_function(mlil_func.ssa_form, int(sys.argv[3],2))
+                for path in path_ints:
+                    analyze_function(mlil_func.ssa_form, path)
                 #print(sym_tab)
                 #sym_tab = table.Table()
         print_unknown_ops()
