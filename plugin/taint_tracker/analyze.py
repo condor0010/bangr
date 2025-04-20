@@ -5,6 +5,7 @@ import parser
 from global_vars import *
 from tree import *
 from table import *
+import time
 
 # 3 types of mlil instructions: one-to-one, inherited, atomic.
 # `one-to-one means` means the operation will propagate the
@@ -263,6 +264,9 @@ if __name__ == '__main__':
     with binaryninja.load(sys.argv[1]) as bv:
         bv.update_analysis_and_wait()
         parser.ADDR_SIZE = bv.address_size
+        while binaryninja.binaryview.AnalysisState.IdleState != bv.analysis_info.state:
+            time.sleep(1)
+        print(f'state: {bv.analysis_info.state}')
         for function in bv.functions:
             if function.name != sys.argv[2]:
                 continue
