@@ -57,5 +57,6 @@ build/out/bin/bangr test_bins/num 0x00401146
 | Insert comments into the BinaryNinja UI.                                                                             |Marcus        | :large_blue_circle: | 2025/03/07 |             |
 | Make it show up as a plugin in the BinaryNinja UI.                                                                   |Louie         | :green_circle:      | 2025/03/07 |             |
 | Implement the translation of BinaryNinja MLIL to use in Z3.                                                          |Marcus        | :large_blue_circle: | 2025/03/07 |             |
-| Coalescing functions to track the inheritance of taint.                                                              |Louie/Marcus  | :red_circle:        | TBD        |             |
-| Develop a Data Structure paired to each group of codeblocks to facilitate the tracking of taint.                     |Marcus        | :red_circle:        | N/A        | N/A         |
+| Finish analize.py                                                                                                    |Dylan         | :red_circle:        | 2025/04/30 |             |
+| Finish UI                                                                                                            |Marcus        | :red_circle:        | 2025/04/30 |             |
+| optomize analisys using itertools/functools                                                                          |Louie         | :red_circle:        | 2025/04/30 | N/A         |
