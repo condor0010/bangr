@@ -11,10 +11,10 @@ class SSAVarTab(QTableWidget):
         QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
-    def __init__(self, bv: BinaryView, current_offset: int):
+    def __init__(self, bv: BinaryView):
         super().__init__(0, 2)
         self.bv = bv
-        self.current_offset = current_offset
+        self.current_offset = 0
         self.setHorizontalHeaderLabels(["Variable", "Taint"])
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
@@ -23,7 +23,6 @@ class SSAVarTab(QTableWidget):
 
         Args:
             bv (BinaryView): The Binaryview of the current analyzed binary.
-            current_offset (int): The current code offset selected in the UI.
         """
 
         self.setRowCount(0)
@@ -68,18 +67,17 @@ class VarTab(QTableWidget):
         QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
-    def __init__(self, bv: BinaryView, current_offset: int):
+    def __init__(self, bv: BinaryView):
         """Initialize bANGR Variable Tab.
 
         Args:
             bv (BinaryView): The Binaryview of the current analyzed binary.
-            current_offset (int): The current code offset selected in the UI.
         """
 
         super().__init__(0, 2)
 
         self.bv = bv
-        self.current_offset = current_offset
+        self.current_offset = 0
         self.setHorizontalHeaderLabels(["Variable", "Taint"])
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
@@ -137,23 +135,46 @@ class CFPTab(QWidget):
         QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
-    def __init__(self, bv:BinaryView, current_offset:int):
+    def __init__(self, bv:BinaryView):
         super().__init__()
 
         self.bv = bv
-        self.current_offset = current_offset
-        self.bList = []
+        self.path_mask = 0
+        self.current_block = None
         self.dropdowns = []
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+
         content = QWidget()
         scroll.setWidget(content)
         self.content_layout = QVBoxLayout(content)
-        
         self.content_layout.addStretch()
+
         main_layout = QVBoxLayout(self)
         main_layout.addWidget(scroll)
-        self._add_dropdown()
+    
+    def _remove_dropdowns(self, start:int, number_of_dropdowns:int):
+        pass #TODO
+
+    def _remove_dropdown(self):
+        pass #TODO
+
+    def update_CFP(self, current_offset):
+        self._remove_dropdowns(0, len(self.dropdowns))
+        self.current_offset = current_offset
+
+        func = next(iter(self.bv.get_functions_containing(current_offset)), None)
+        if not func: return
+        func = func.mlil_if_available
+        if not func: return
+
+        self.current_block = func.basic_blocks[0]
+        for path in self.current_block.outgoing_edges:
+            print(path)
+        self.path_mask = 0
+
+
 
     def _add_dropdown(self, items:list):
         combo = QComboBox()
@@ -161,8 +182,11 @@ class CFPTab(QWidget):
 
         combo.currentIndexChanged.connect(lambda idx, c=combo: self.on_dropdown_changed(c, idx))
         self.content_layout.addWidget(combo)
-        self.bList.append(combo)
+        self.dropdowns.append(combo)
 
     def _on_dropdown_changed(self, combo, index):
-        if self.dropdowns.index(combo) < len(self.bList) - 1:
-            pass
+        end = len(self.dropdowns)
+        c_index = self.dropdowns.index(combo)
+        if c_index < end - 1:
+            pass #TODO
+            

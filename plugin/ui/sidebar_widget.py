@@ -31,9 +31,9 @@ class VariableListWidget(SidebarWidget):
         
         self.tabWidget = QTabWidget()
 
-        self.VarTab = VarTab(self.bv, self.current_offset)
-        self.SSAVarTab = SSAVarTab(self.bv, self.current_offset)
-        self.CFPTab = CFPTab(self.bv, self.current_offset)
+        self.VarTab = VarTab(self.bv)
+        self.SSAVarTab = SSAVarTab(self.bv)
+        self.CFPTab = CFPTab(self.bv)
 
         for tab, name in [
             (self.VarTab, "Variables"),
@@ -115,6 +115,7 @@ class VariableListWidget(SidebarWidget):
     def _populate_variable_list(self):
         self.VarTab.populate_variables(self.current_offset)
         self.SSAVarTab.populate_variables(self.current_offset)
+        self.CFPTab.update_CFP(self.current_offset)
         
     def notifyViewLocationChanged(self, view, location):
         if location: self.current_offset = location.getOffset()
