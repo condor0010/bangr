@@ -140,8 +140,8 @@ class CFPTab(QWidget):
         super().__init__()
 
         self.bv = bv
-        self.block_list = None
         self.last_temp_highlight = None
+        self.block_list = []
         self.dropdowns = []
 
         scroll = QScrollArea()
@@ -165,6 +165,8 @@ class CFPTab(QWidget):
         for _ in range(number_of_dropdowns):
             self._remove_dropdown(self.dropdowns.pop())
             self.block_list.pop().set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+        if len(self.block_list) == 1:
+            self.unhighlight_root()
 
     def _remove_dropdown(self, combo: QComboBox):
         self.content_layout.removeWidget(combo)
@@ -187,6 +189,12 @@ class CFPTab(QWidget):
         
         self._add_dropdown(drop_items)
         
+    def highlight_root(self):
+        self.block_list[0].set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
+    
+    def unhighlight_root(self):
+        self.block_list[0].set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+        
 
     def _add_dropdown(self, items:list):
         combo = QComboBox()
@@ -200,25 +208,33 @@ class CFPTab(QWidget):
     def _temp_block_highlight(self, combo:QComboBox, index:int):
         if self.last_temp_highlight is not None:
             self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+            if self.last_temp_highlight in self.block_list:
+                self.highlight_root()
+                self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
+            self.last_temp_highlight = None
         if index != 0:
             drop_index = self.dropdowns.index(combo)
             sel_block = self.block_list[drop_index].outgoing_edges[index-1].target
+            self.highlight_root()
             sel_block.set_auto_highlight(HighlightColor(HighlightStandardColor.YellowHighlightColor))
             self.last_temp_highlight = sel_block    
             
     def _add_block(self, combo:QComboBox):
         new_block = None
-        for edge in self.block_list[len(self.block_list) - 1].outgoing_edges:
+        last_block_index = len(self.block_list) - 1
+        for edge in self.block_list[last_block_index].outgoing_edges:
             if int(combo.currentText(), 16) == edge.target[0].address:
                 new_block = edge.target
         if new_block is not None:
             self.block_list.append(new_block)
             drop_items = ["Select an Option..."]
             drop_items.extend([f"0x{path.target[0].address:x}" for path in new_block.outgoing_edges])
-            
             if len(drop_items) == 1:
                 drop_items = ["No Outgoing Edges"]
-            
+            self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+            self.last_temp_highlight = None
+            if last_block_index == 0:
+                self.highlight_root()
             new_block.set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
             
             self._add_dropdown(drop_items)
