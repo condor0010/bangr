@@ -1,14 +1,12 @@
 from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QWidget, QVBoxLayout, QScrollArea, QComboBox, QPushButton
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtCore import Qt
-from binaryninja import BinaryView, HighlightColor
+from binaryninja import BasicBlock, BinaryView, HighlightColor
 from binaryninja.enums import HighlightStandardColor
+from ..taint_tracker.path_gen import CFGPathExtractor
 
 class SSAVarTab(QTableWidget):
     """The SSA Variable Tab for the bANGR plugin.
-
-    Args:
-        QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
     def __init__(self, bv: BinaryView):
@@ -22,7 +20,7 @@ class SSAVarTab(QTableWidget):
         """Polulate tab with the variables of the current function selected.
 
         Args:
-            bv (BinaryView): The Binaryview of the current analyzed binary.
+            current_offset (int): The current code offset selected in the UI.
         """
 
         self.setRowCount(0)
@@ -32,6 +30,7 @@ class SSAVarTab(QTableWidget):
         if not func: return
         func = func.mlil_if_available
         if not func: return
+        
         for var in func.ssa_vars:
             self.add_variable_to_table(f"{var.name}#{var.version}", self._get_variable_value(var))
     
@@ -62,9 +61,6 @@ class SSAVarTab(QTableWidget):
     
 class VarTab(QTableWidget):
     """The Variable Tab for the bANGR plugin.
-
-    Args:
-        QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
     def __init__(self, bv: BinaryView):
@@ -83,10 +79,9 @@ class VarTab(QTableWidget):
         
 
     def populate_variables(self, current_offset:int):
-        """Polulate tab with the variables of the current function selected.
+        """Populate tab with the variables of the current function selected.
 
         Args:
-            bv (BinaryView): The Binaryview of the current analyzed binary.
             current_offset (int): The current code offset selected in the UI.
         """
 
@@ -130,38 +125,73 @@ class VarTab(QTableWidget):
     
 class CFPTab(QWidget):
     """The SSA Variable Tab for the bANGR plugin.
-
-    Args:
-        QTableWidget (QTableWidget): The inherited QTableWidget from Binary Ninja
     """
 
     def __init__(self, bv:BinaryView):
+        """The Control Flow Tab class.
+
+        Args:
+            bv (BinaryView): The Binaryview of the current analyzed binary.
+        """
+        
         super().__init__()
 
         self.bv = bv
-        self.path_mask = 0
-        self.current_block = None
+        self.last_temp_highlight = None
+        self.block_list = []
         self.dropdowns = []
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
 
         content = QWidget()
+        exec_button = QPushButton(text="Execute")
+        exec_button.pressed.connect(self.execute)
         scroll.setWidget(content)
+        
         self.content_layout = QVBoxLayout(content)
-        self.content_layout.addStretch()
+        self.content_layout.setAlignment(Qt.AlignTop)
+        self.content_layout.addWidget(exec_button)
 
         main_layout = QVBoxLayout(self)
         main_layout.addWidget(scroll)
     
-    def _remove_dropdowns(self, start:int, number_of_dropdowns:int):
-        pass #TODO
+    def execute(self):
+        print("Execute!")
+    
+    def _remove_path_blocks(self, number_of_path_blocks:int):
+        """Remove a certain number of blocks from the path.
 
-    def _remove_dropdown(self):
-        pass #TODO
+        Args:
+            number_of_path_blocks (int): The number of path blocks to remove.
+        """
+        
+        for _ in range(number_of_path_blocks):
+            self._remove_dropdown(self.dropdowns.pop())
+            self.block_list.pop().set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+
+        if len(self.block_list) == 1:
+            self._unhighlight_root_block()
+
+    def _remove_dropdown(self, combo: QComboBox):
+        """Remove a dropdown widget.
+
+        Args:
+            combo (QComboBox): The dropdown object to remove.
+        """
+        
+        self.content_layout.removeWidget(combo)
+        combo.setParent(None)
+        combo.deleteLater()
 
     def update_CFP(self, current_offset):
-        self._remove_dropdowns(0, len(self.dropdowns))
+        """Update the CFP Context
+
+        Args:
+            current_offset (int): The current code offset selected in the UI.
+        """
+
+        self._remove_path_blocks(len(self.dropdowns))
         self.current_offset = current_offset
 
         func = next(iter(self.bv.get_functions_containing(current_offset)), None)
@@ -169,24 +199,160 @@ class CFPTab(QWidget):
         func = func.mlil_if_available
         if not func: return
 
-        self.current_block = func.basic_blocks[0]
-        for path in self.current_block.outgoing_edges:
-            print(path)
-        self.path_mask = 0
-
-
+        self.block_list = [func.basic_blocks[0]]
+        
+        drop_items = ["Select an Option..."]
+        drop_items.extend([f"0x{path.target[0].address:x}" for path in self.block_list[0].outgoing_edges])
+        
+        self._add_dropdown(drop_items)
+        
+    def _highlight_root_block(self):
+        self.block_list[0].set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
+    
+    def _unhighlight_root_block(self):
+        self.block_list[0].set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+        
 
     def _add_dropdown(self, items:list):
+        """Add a dropdown to the content area.
+
+        Args:
+            items (list): The list of items that will be displayed in the dropdown.
+        """
+        
         combo = QComboBox()
         combo.addItems(items)
 
-        combo.currentIndexChanged.connect(lambda idx, c=combo: self.on_dropdown_changed(c, idx))
+        # These lambda functions allow us to have both the object and the index that was changed.
+        combo.currentIndexChanged.connect(lambda idx, c=combo: self._on_dropdown_changed(c, idx))
+        combo.highlighted.connect(lambda idx, c=combo: self._temp_block_highlight(c, idx))
+        
         self.content_layout.addWidget(combo)
         self.dropdowns.append(combo)
+        
+    def _temp_block_highlight(self, combo:QComboBox, index:int):
+        """Controls the temporary highlighting functionality of the path pane.
 
-    def _on_dropdown_changed(self, combo, index):
+        Args:
+            combo (QComboBox): The dropdown that is being modified.
+            index (int): The index of the dropdown that is being selected.
+        """
+        
+        if self.last_temp_highlight is not None:
+            
+            self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+            
+            if self.last_temp_highlight in self.block_list:
+                self._highlight_root_block()
+                self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
+                
+            self.last_temp_highlight = None
+            
+        if index != 0:
+            
+            drop_index = self.dropdowns.index(combo)
+            sel_block = self.block_list[drop_index].outgoing_edges[index-1].target
+            
+            self._highlight_root_block()
+            sel_block.set_auto_highlight(HighlightColor(HighlightStandardColor.YellowHighlightColor))
+            
+            self.last_temp_highlight = sel_block    
+            
+    def _add_block(self, combo:QComboBox):
+        """Add block to path.
+
+        Args:
+            combo (QComboBox): The dropdown to be added to the content area.
+        """
+        
+        new_block = None
+        last_block_index = len(self.block_list) - 1
+        
+        for edge in self.block_list[last_block_index].outgoing_edges:
+            
+            if int(combo.currentText(), 16) == edge.target[0].address:
+                new_block = edge.target
+                
+        if new_block is not None:
+            
+            self.block_list.append(new_block)
+            
+            drop_items = ["Select an Option..."]
+            drop_items.extend([f"0x{path.target[0].address:x}" for path in new_block.outgoing_edges])
+            
+            if len(drop_items) == 1:
+                drop_items = ["No Outgoing Edges"]
+                
+            self.last_temp_highlight.set_auto_highlight(HighlightColor(HighlightStandardColor.NoHighlightColor))
+            self.last_temp_highlight = None
+            
+            if last_block_index == 0:
+                self._highlight_root_block()
+                
+            new_block.set_auto_highlight(HighlightColor(HighlightStandardColor.BlueHighlightColor))
+            
+            self._add_dropdown(drop_items)
+
+    def _on_dropdown_changed(self, combo:QComboBox, index:int):
+        """Controls the functionality of the addition of a dropdown as soon an option is made on an existing dropdown.
+
+        Args:
+            combo (QComboBox): The dropdown that is being modified.
+            index (int): The index of the dropdown that is being selected.
+        """
+        
         end = len(self.dropdowns)
         c_index = self.dropdowns.index(combo)
+        
         if c_index < end - 1:
-            pass #TODO
+            self._remove_path_blocks((end - 1) - c_index)
+            if index != 0:
+                self._add_block(combo)
+        else:
+            self._add_block(combo)
+        
+        
+class OldCFPTab(QComboBox):
+    """The old CFP tab for the bANGR plugin.
+    """
+
+    def __init__(self, bv:BinaryView):
+        """The old CFP tab for the bANGR plugin.
+
+        Args:
+            bv (BinaryView): The Binaryview of the current analyzed binary.
+        """
+        super().__init__()
+        text="Select an option..."
+
+        self.bv = bv
+        self.setPlaceholderText(text)
+
+        self.setMinimumWidth(0)
+        self.setMaximumHeight(50)
+
+        self.currentIndexChanged.connect(self._on_selection_changed)
+
+    def updateContext(self, current_offset:int):
+        """Update the function context for the CFP tab.
+
+        Args:
+            current_offset (int): The current code offset selected in the UI.
+        """
+        
+        func = next(iter(self.bv.get_functions_containing(current_offset)), None)
+        if func is None: return
+        func = func.mlil_if_available
+        if not func: return
+        
+        pathgen = CFGPathExtractor(func)
+        test = pathgen.get_paths()
+        path_ints = pathgen.get_path_ints()
+        path_strs = [str(path) for path in path_ints]
+
+        self.clear()
+        self.addItems(path_strs)
+
+    def _on_selection_changed(self, index):
+        print(f"[BNComboBox] Selected: {self.itemText(index)}")
             
