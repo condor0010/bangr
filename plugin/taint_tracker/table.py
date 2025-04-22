@@ -147,6 +147,8 @@ class Table():
         return string
 
     class Entry():
+        # TODO BUG: modify get_taint, set_taint to check for and merge or divide overlapping
+        # taint references
         def __init__(self, size, offset, sign, is_deref, taint, taint_table, is_phi=False):
             self.taint_table = taint_table
             if is_deref:
@@ -197,10 +199,6 @@ class Table():
                         return True
                 self.ranges.append([vkey.size, vkey.offset, vkey.sign, taint])
             return False
-
-        # TODO
-        def _check_overlap(self):
-            return Taint(None)
 
         def eval_all(self):
             # TODO: account for overlap with and without exact match, could affect taint
