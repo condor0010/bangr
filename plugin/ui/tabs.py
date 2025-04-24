@@ -3,6 +3,8 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtCore import Qt
 from binaryninja import BasicBlock, BinaryView, HighlightColor
 from binaryninja.enums import HighlightStandardColor
+from ..taint_tracker import parser
+from ..taint_tracker.analyze import *
 from ..taint_tracker.path_gen import CFGPathExtractor
 
 class SSAVarTab(QTableWidget):
@@ -158,6 +160,9 @@ class CFPTab(QWidget):
     
     def execute(self):
         print("Execute!")
+        if parser.ADDR_SIZE is None:
+            parser.ADDR_SIZE = self.bv.address_size
+        print(analyze_defined_function(self.block_list))
     
     def _remove_path_blocks(self, number_of_path_blocks:int):
         """Remove a certain number of blocks from the path.
@@ -326,6 +331,7 @@ class OldCFPTab(QComboBox):
         text="Select an option..."
 
         self.bv = bv
+        self.func = None
         self.setPlaceholderText(text)
 
         self.setMinimumWidth(0)
@@ -340,13 +346,13 @@ class OldCFPTab(QComboBox):
             current_offset (int): The current code offset selected in the UI.
         """
         
-        func = next(iter(self.bv.get_functions_containing(current_offset)), None)
-        if func is None: return
-        func = func.mlil_if_available
-        if not func: return
+        self.func = next(iter(self.bv.get_functions_containing(current_offset)), None)
+        if self.func is None: return
+        self.func = self.func.mlil_if_available
+        if not self.func: return
         
-        pathgen = CFGPathExtractor(func)
-        test = pathgen.get_paths()
+        pathgen = CFGPathExtractor(self.func)
+        print(pathgen.get_paths())
         path_ints = pathgen.get_path_ints()
         path_strs = [str(path) for path in path_ints]
 
@@ -354,5 +360,9 @@ class OldCFPTab(QComboBox):
         self.addItems(path_strs)
 
     def _on_selection_changed(self, index):
+        if parser.ADDR_SIZE is None:
+            parser.ADDR_SIZE = self.bv.address_size
+        print(analyze_function(self.func, int(self.itemText(index))))
         print(f"[BNComboBox] Selected: {self.itemText(index)}")
+        
             

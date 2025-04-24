@@ -1,7 +1,7 @@
 from binaryninja import MediumLevelILOperation
 from binaryninja.mediumlevelil import SSAVariable, MediumLevelILConst, MediumLevelILAdd, MediumLevelILConstPtr, MediumLevelILConstData, MediumLevelILVarSsa, MediumLevelILStoreSsa, MediumLevelILImport, MediumLevelILSub
-from global_vars import *
-from tree import *
+from .global_vars import *
+from .tree import *
 
 # default addr size. should be overwritten once binary
 # view is opened.

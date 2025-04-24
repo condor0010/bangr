@@ -1,10 +1,10 @@
 import sys
 import binaryninja
 from collections import deque
-import parser
-from global_vars import *
-from tree import *
-from table import *
+from . import parser
+from .global_vars import *
+from .tree import *
+from .table import *
 import time
 
 # 3 types of mlil instructions: one-to-one, inherited, atomic.
@@ -152,6 +152,15 @@ def analyze_block(block, state_taint_table, phi_table): # return map
                 phi_table.record_if_phi(dest.var)
                 state_taint_table.set_taint(dest, src_tree)
             #print(f'\t\taddress: {hex(self.def_inst.address)}\tvariable: {repr(src_tree)}')
+            
+def walk_defined_graph(path:list, state_taint_table:Table, phi_table:PhiTable):
+    print("Walking graph")
+    for block in path:
+        print(block)
+        path_traversed.append(block)
+        analyze_block(block, state_taint_table, phi_table)
+    return True
+        
 
 def walk_graph(first_block, path, state_taint_table, phi_table):
     print("Walking graph")
@@ -233,13 +242,30 @@ def gen_symbol_table(mlil_ssa_func):
                 sym_tab.set_taint(parser.VarKey(var, var.type.width), Taint(None))
     # base symbol table is populated at this point
     # TODO louie: sym_tab as the function specific symbol table instead of being global
+    
+def analyze_defined_function(path:list):
+    assert len(path) > 0
+    phi_table = PhiTable()
+    func = path[0].function
+    if not func: return
+    func = func.mlil_if_available
+    if not func: return
+    func_ssa_vars = func.ssa_vars
+    phi_table.populate_phi_table(func_ssa_vars)
+    state_taint_table = Table()
+    for var in func_ssa_vars:
+        if is_tainted_arg(var):
+            state_taint_table.set_taint(parser.VarKey(var, var.type.width), Taint(0))
+    walk_defined_graph(path, state_taint_table, phi_table)
+    print(state_taint_table)
+    print(phi_table)
 
 # generate the base symbol table and then walk it based on a path
 def analyze_function(mlil_ssa_func, path):
     # TODO: implement get_phis
     phi_table = PhiTable()
     phi_table.populate_phi_table(mlil_ssa_func.ssa_vars)
-    state_taint_table = table.Table()
+    state_taint_table = Table()
     for var in mlil_ssa_func.ssa_vars:
         if is_tainted_arg(var):
             state_taint_table.set_taint(parser.VarKey(var, var.type.width), Taint(0))
@@ -289,6 +315,6 @@ if __name__ == '__main__':
                 for path in path_ints:
                     analyze_function(mlil_func.ssa_form, path)
                 #print(sym_tab)
-                #sym_tab = table.Table()
+                #sym_tab = Table()
         print_unknown_ops()
 print(ctr)

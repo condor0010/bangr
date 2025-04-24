@@ -1,5 +1,5 @@
 from binaryninja.mediumlevelil import SSAVariable
-from global_vars import sym_tab
+from .global_vars import sym_tab
 # TODO: Size MUST be specified in initialization
 class VarKey():
     # is_deref is if the the var, size, and offset are treated like a pointer
