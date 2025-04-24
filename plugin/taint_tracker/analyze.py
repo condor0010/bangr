@@ -173,6 +173,7 @@ def walk_graph(first_block, path, state_taint_table, phi_table):
         print(next_block)
         path_traversed.append(next_block)
         analyze_block(next_block, state_taint_table, phi_table)
+        # TODO BUG: change to intate arraylist that can handle jump tables
         if len(next_block.outgoing_edges) == 2:
             # we're assuming true and false are the only possible options when there are 2 outgoing edges
             assert next_block.outgoing_edges[0].type == binaryninja.BranchType.FalseBranch or next_block.outgoing_edges[0].type == binaryninja.BranchType.TrueBranch
@@ -204,6 +205,7 @@ def walk_graph(first_block, path, state_taint_table, phi_table):
             return True
         else:
             # unaccounted for, inspect this
+            print(next_block[0].address)
             print(next_block.outgoing_edges)
             assert False
 
